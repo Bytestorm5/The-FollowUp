@@ -1,0 +1,21 @@
+{
+    "White House": {
+        "Newsroom": {
+            "link": "https://www.whitehouse.gov/news/"
+        }
+    },
+    "Library of Congress": {
+        "Congress": {
+            "link": "https://www.congress.gov/search?pageSort=latestAction%3Adesc&q=%7B%22source%22%3A%22legislation%22%2C%22congress%22%3A%22119%22%2C%22bill-status%22%3A%22all%22%7D&pageSize=250",
+            "guidance": "For results, look for the class 'basic-search-results-lists expanded-view'."
+        }
+    },
+    "Dept of Agriculture": {
+        "Press Releases": {
+            "link": "https://www.usda.gov/about-usda/news/press-releases"
+        },
+        "Food & Nutrition Service": {
+            "link": "https://www.fns.usda.gov/newsroom"
+        }
+    }
+}

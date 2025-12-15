@@ -1,0 +1,3 @@
+openapi.documented.yml
+*.pyc
+/service/scripts/.tmp

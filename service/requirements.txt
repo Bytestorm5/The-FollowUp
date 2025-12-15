@@ -1,0 +1,9 @@
+httpx[http2]
+pymongo[srv]
+openai
+pydantic
+python-dotenv
+BeautifulSoup4
+playwright
+requests
+rss-parser
