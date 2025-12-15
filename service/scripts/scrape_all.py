@@ -178,5 +178,5 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
-	main(["2025-12-12"])
+	main()
 
