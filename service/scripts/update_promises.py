@@ -69,18 +69,20 @@ def get_claims() -> List[Tuple[Any, MongoClaim]]:
 
 
 def _get_pipeline_today():
-    """Return pipeline 'today' using `PIPELINE_RUN_DATE` env var (YYYY-MM-DD) if set.
-    Falls back to real today otherwise."""
-    import os as _os
-    import datetime as _dt
-
-    v = _os.environ.get('PIPELINE_RUN_DATE')
-    if v:
-        try:
-            return _dt.date.fromisoformat(v)
-        except Exception:
-            pass
-    return _dt.date.today()
+    """Return pipeline 'today' in fixed UTC-5 unless overridden by env."""
+    try:
+        from util.timezone import pipeline_today
+        return pipeline_today()
+    except Exception:
+        import os as _os
+        import datetime as _dt
+        v = _os.environ.get('PIPELINE_RUN_DATE')
+        if v:
+            try:
+                return _dt.date.fromisoformat(v)
+            except Exception:
+                pass
+        return _dt.date.today()
 
 
 def _write_jsonl(path: str, lines):
@@ -132,7 +134,13 @@ def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str,
         content_parts.append(f"Verbatim Quote from Article: {getattr(claim, 'verbatim_claim', '')}")
         content_parts.append(f"Completion Condition: {getattr(claim, 'completion_condition', '')}")
         content_parts.append(f"Projected Completion Date: {getattr(claim, 'completion_condition_date', '')}")
-        content_parts.append(f"Current Date: {datetime.date.today()}")
+        # Use pipeline 'today' (fixed UTC-5) for consistency
+        try:
+            from util.timezone import pipeline_today as _pt
+            _today = _pt()
+        except Exception:
+            _today = _get_pipeline_today()
+        content_parts.append(f"Current Date: {_today}")
 
         content = "\n".join(content_parts)
 

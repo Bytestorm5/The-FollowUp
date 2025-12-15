@@ -124,7 +124,11 @@ def main(argv=None):
 	if len(argv) >= 1:
 		date = _parse_date_arg(argv[0])
 	else:
-		date = datetime.date.today() - datetime.timedelta(days=1)
+		try:
+			from util.timezone import pipeline_yesterday
+			date = pipeline_yesterday()
+		except Exception:
+			date = datetime.date.today() - datetime.timedelta(days=1)
 	print(f"Running scrapers for date: {date}")
 	print(argv)
 	exit()

@@ -24,7 +24,7 @@ def main() -> int:
     parser.add_argument("--date", help="Pipeline date to use (YYYY-MM-DD). Defaults to yesterday if not provided")
     args = parser.parse_args()
 
-    # Determine date to run pipeline for. If not provided, default to yesterday.
+    # Determine date to run pipeline for. If not provided, default to yesterday in fixed UTC-5.
     if args.date:
         try:
             run_date = datetime.datetime.strptime(args.date, "%Y-%m-%d").date()
@@ -32,7 +32,13 @@ def main() -> int:
             print("Error: --date must be in YYYY-MM-DD format")
             return 2
     else:
-        run_date = datetime.date.today() - datetime.timedelta(days=1)
+        try:
+            # Prefer our fixed UTC-5 computation when available
+            from util.timezone import pipeline_yesterday
+            run_date = pipeline_yesterday()
+        except Exception:
+            # Fallback: system local yesterday
+            run_date = datetime.date.today() - datetime.timedelta(days=1)
 
     print(f"\nRunning pipeline for date: {run_date}")
     date_str = run_date.isoformat()
@@ -68,6 +74,8 @@ def main() -> int:
 
         env = os.environ.copy()
         env['PIPELINE_RUN_DATE'] = date_str
+        # Optional hint for downstream (not required since we pass date explicitly)
+        env['PIPELINE_TZ_OFFSET'] = '-05:00'
 
         completed = subprocess.run(cmd, env=env)
         if completed.returncode != 0:

@@ -24,18 +24,20 @@ logger = logging.getLogger(__name__)
 
 
 def _get_pipeline_today():
-    """Return the pipeline 'today' date. If `PIPELINE_RUN_DATE` env var is set (YYYY-MM-DD),
-    parse and return it, otherwise fall back to the real today."""
-    import os as _os
-    import datetime as _dt
-
-    v = _os.environ.get('PIPELINE_RUN_DATE')
-    if v:
-        try:
-            return _dt.date.fromisoformat(v)
-        except Exception:
-            pass
-    return _dt.date.today()
+    """Return the pipeline 'today' date in fixed UTC-5, unless overridden by env."""
+    try:
+        from util.timezone import pipeline_today
+        return pipeline_today()
+    except Exception:
+        import os as _os
+        import datetime as _dt
+        v = _os.environ.get('PIPELINE_RUN_DATE')
+        if v:
+            try:
+                return _dt.date.fromisoformat(v)
+            except Exception:
+                pass
+        return _dt.date.today()
 
 
 def _sanitize_schema_for_strict(schema: Any) -> Any:

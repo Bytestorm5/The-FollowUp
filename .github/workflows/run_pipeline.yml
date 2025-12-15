@@ -1,0 +1,35 @@
+name: Run Pipeline
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 6 * * *' # nightly at 06:30 UTC / 1:30 EST
+
+jobs:
+  run-pipeline:
+    name: Run pipeline on main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11.2'
+
+      - name: Create virtualenv and install requirements
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          if [ -f service/requirements.txt ]; then pip install -r service/requirements.txt; fi
+
+      - name: Run pipeline
+        env:
+          PYTHONUNBUFFERED: 1
+        run: |
+          source .venv/bin/activate
+          python -u service/scripts/run_pipeline.py
