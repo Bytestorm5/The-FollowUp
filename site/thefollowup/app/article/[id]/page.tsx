@@ -83,9 +83,9 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
                     {typeLabel(c.type)}
                   </span>
                   <span className="font-medium">{c.claim}</span>
-                  {c.completion_condition_date && (
+                  {/* {c.completion_condition_date && (
                     <span className="text-foreground/80"> — {c.completion_condition_date.toString()}</span>
-                  )}
+                  )} */}
                   {c.completion_condition_date && (
                     <span className="ml-2 text-[var(--color-status-pending)]">(
                       due {fmtDateUTC(c.completion_condition_date as any)})</span>
