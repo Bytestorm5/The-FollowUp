@@ -131,7 +131,6 @@ def main(argv=None):
 			date = datetime.date.today() - datetime.timedelta(days=1)
 	print(f"Running scrapers for date: {date}")
 	print(argv)
-	exit()
 	combined = run_all(date)
 	print(f"Combined articles: {len(combined.articles)}")
 	# Persist to mongo if available
