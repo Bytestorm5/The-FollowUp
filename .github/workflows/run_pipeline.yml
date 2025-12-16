@@ -35,4 +35,5 @@ jobs:
           PYTHONUNBUFFERED: 1
         run: |
           source .venv/bin/activate
+          playwright install
           python -u service/scripts/run_pipeline.py

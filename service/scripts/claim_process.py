@@ -169,20 +169,174 @@ def _create_batch(request_lines: List[Dict[str, Any]], endpoint: str) -> Dict[st
     return batch
 
 
-def _poll_batch(batch_id: str, poll_interval: int = 5, timeout: int = 60 * 30):
+def _poll_batch(batch_id: str, poll_interval: int = 5, timeout: int = 60 * 30, expected_total: Optional[int] = None):
+    """Poll a batch until completion or timeout.
+
+    Sliding timeout resets whenever progress ratio (completed/total) increases.
+    Also enforces a hard stop at 4 hours from the start of polling.
+    """
+    def _extract_progress(b: Any, default_total: Optional[int]) -> (int, int, Optional[float]):
+        rc = getattr(b, 'request_counts', None) or (b.get('request_counts') if isinstance(b, dict) else None)
+        total = None
+        completed = None
+        if rc is not None:
+            # rc may be object-like or dict-like
+            total = getattr(rc, 'total', None) or (rc.get('total') if isinstance(rc, dict) else None)
+            completed = (
+                getattr(rc, 'completed', None)
+                or (rc.get('completed') if isinstance(rc, dict) else None)
+                or getattr(rc, 'succeeded', None)
+                or (rc.get('succeeded') if isinstance(rc, dict) else None)
+            )
+        if total is None:
+            total = default_total
+        if completed is None:
+            completed = 0
+        ratio = None
+        try:
+            if total and total > 0:
+                ratio = completed / total
+        except Exception:
+            ratio = None
+        return int(completed or 0), int(total or 0), ratio
+
     start = time.time()
+    last_progress_ts = start
+    hard_stop_ts = start + 60 * 60 * 4  # 4 hours hard stop
+    last_ratio = -1.0
+
     while True:
         batch = _OPENAI_CLIENT.batches.retrieve(batch_id)
         status = getattr(batch, 'status', None) or (batch.get('status') if isinstance(batch, dict) else None)
-        logger.info(f"Batch {batch_id} status: {status}")
+
+        completed, total, ratio = _extract_progress(batch, expected_total)
+        if total:
+            ratio_str = f"{ratio*100:.1f}%" if ratio is not None else "n/a"
+            logger.info(f"Batch {batch_id} status: {status} | progress: {completed}/{total} ({ratio_str})")
+        else:
+            logger.info(f"Batch {batch_id} status: {status}")
+
         # Terminal statuses per Batch docs: validating/failed/in_progress/finalizing/completed/expired/cancelling/cancelled
         if status in ('completed', 'expired', 'cancelled'):
             return batch
         if status in ('failed',):
             raise RuntimeError(f"Batch {batch_id} failed: {batch}")
-        if time.time() - start > timeout:
-            raise TimeoutError(f"Timed out waiting for batch {batch_id}")
+
+        # Reset sliding timeout if progress improved
+        if ratio is not None and ratio > last_ratio:
+            last_ratio = ratio
+            last_progress_ts = time.time()
+
+        now = time.time()
+        if now > hard_stop_ts:
+            raise TimeoutError(f"Hard stop reached (4h) while waiting for batch {batch_id}")
+        if now - last_progress_ts > timeout:
+            raise TimeoutError(f"Timed out (no progress) waiting for batch {batch_id}")
+
         time.sleep(poll_interval)
+
+
+def _fallback_process_with_responses(
+    docs: List[dict],
+    template: str,
+    model: str,
+    schema: Dict[str, Any],
+    schema_json: str,
+):
+    """Fallback path: process docs one-by-one using Responses.parse with structured output.
+
+    This mirrors the insertion flow from the Batch path.
+    """
+    claims_coll = mongo.silver_claims
+    bronze = getattr(mongo, 'bronze_links')
+
+    inserted_claims = 0
+    processed_article_ids = set()
+
+    for doc in docs:
+        try:
+            article_id = str(doc.get('_id'))
+            doc_format = f"""Title: {doc.get('title', 'Unknown Title')}\nTimestamp: {doc.get('date')}\nTags: {','.join(doc.get('tags', []))}\nSource: {doc.get('link', 'Unknown Source')}\n\nContent: {doc.get('raw_content', 'Unknown Content')}"""
+            content = template.replace('{{SCHEMA}}', schema_json).replace('{{ARTICLE}}', doc_format)
+
+            # Use Responses API with structured parsing to ClaimProcessingResult
+            try:
+                resp = _OPENAI_CLIENT.responses.parse(
+                    model=model,
+                    input=content,
+                    text_format=ClaimProcessingResult,
+                )
+            except Exception:
+                logger.exception('Responses.parse call failed for article %s', article_id)
+                continue
+
+            parsed = getattr(resp, 'output_parsed', None) or (resp.get('output_parsed') if isinstance(resp, dict) else None)
+            if parsed is None:
+                logger.error('No parsed output for article %s from responses API', article_id)
+                continue
+
+            try:
+                if not isinstance(parsed, ClaimProcessingResult):
+                    parsed = _pydantic_parse_result(parsed)
+            except Exception:
+                logger.exception('Failed to coerce parsed output into ClaimProcessingResult for article %s', article_id)
+                continue
+
+            article_link = doc.get('link', '')
+
+            for step in parsed.steps:
+                claim_doc = _pydantic_dump(step)
+
+                article_date_raw = doc.get('date')
+                resolved_article_date = _resolve_date_like(article_date_raw)
+
+                completion_raw = claim_doc.get('completion_condition_date')
+                resolved_completion = _resolve_date_like(completion_raw)
+                import datetime as _dt
+                date_past = False
+                if resolved_completion is not None:
+                    date_past = resolved_completion < _get_pipeline_today()
+
+                payload = claim_doc.copy()
+                payload['article_id'] = article_id
+                payload['article_link'] = article_link
+                payload['article_date'] = resolved_article_date or _get_pipeline_today()
+                payload['date_past'] = date_past
+
+                try:
+                    mongo_claim = MongoClaim(**payload)
+                except Exception:
+                    logger.exception('Failed to construct MongoClaim for article %s; payload=%s', article_id, payload)
+                    continue
+
+                final_doc = _pydantic_dump(mongo_claim)
+                try:
+                    final_doc = _normalize_dates(final_doc)
+                except Exception:
+                    logger.exception('normalize_dates failed for article %s; inserting raw doc', article_id)
+
+                try:
+                    claims_coll.insert_one(final_doc)
+                    inserted_claims += 1
+                except Exception:
+                    logger.exception('Failed to insert claim into collection (responses fallback).')
+
+            # Mark article as processed
+            try:
+                from bson import ObjectId
+                bronze.update_one({'_id': ObjectId(article_id)}, {'$set': {'claim_processed': True}})
+                processed_article_ids.add(article_id)
+            except Exception:
+                try:
+                    bronze.update_one({'_id': article_id}, {'$set': {'claim_processed': True}})
+                    processed_article_ids.add(article_id)
+                except Exception:
+                    logger.exception('Failed to set claim_processed for article %s (responses fallback)', article_id)
+        except Exception:
+            logger.exception('Unexpected error in responses fallback for one document')
+
+    logger.info(f'[responses fallback] Inserted {inserted_claims} claim documents. Marked {len(processed_article_ids)} articles processed.')
+    return inserted_claims, processed_article_ids
 
 
 def _read_file_text(file_id: str) -> str:
@@ -307,7 +461,11 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
 
     # Poll until completed
     try:
-        finished = _poll_batch(batch_id, poll_interval=poll_interval)
+        finished = _poll_batch(batch_id, poll_interval=poll_interval, expected_total=len(request_lines))
+    except TimeoutError:
+        logger.warning('Batch polling timed out; falling back to Responses API for remaining items')
+        _fallback_process_with_responses(docs, template, model, schema, schema_json)
+        return
     except Exception:
         logger.exception('Error while polling batch')
         return
