@@ -229,8 +229,20 @@ def _poll_batch(batch_id: str, poll_interval: int = 5, timeout: int = 60 * 30, e
 
         now = time.time()
         if now > hard_stop_ts:
+            # Best-effort cancel to avoid incurring costs if it eventually completes
+            try:
+                _OPENAI_CLIENT.batches.cancel(batch_id)
+                logger.info(f"Issued cancel for batch {batch_id} due to hard stop")
+            except Exception:
+                logger.exception(f"Failed to cancel batch {batch_id} on hard stop")
             raise TimeoutError(f"Hard stop reached (4h) while waiting for batch {batch_id}")
         if now - last_progress_ts > timeout:
+            # Best-effort cancel to avoid incurring costs if it eventually completes
+            try:
+                _OPENAI_CLIENT.batches.cancel(batch_id)
+                logger.info(f"Issued cancel for batch {batch_id} due to inactivity timeout")
+            except Exception:
+                logger.exception(f"Failed to cancel batch {batch_id} on inactivity timeout")
             raise TimeoutError(f"Timed out (no progress) waiting for batch {batch_id}")
 
         time.sleep(poll_interval)
