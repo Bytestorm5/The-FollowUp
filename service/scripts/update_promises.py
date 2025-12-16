@@ -1,7 +1,7 @@
 from enum import Enum
 import os
 import sys
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Optional
 from dotenv import load_dotenv
 import datetime
 import json
@@ -224,6 +224,51 @@ def claim_needs_update(claim: MongoClaim) -> UpdateType:
         update_date = claim.article_date + datetime.timedelta(days=timespan.days / 2)
         return UpdateType.REGULAR_INTERVAL if update_date == today else UpdateType.NO_UPDATE
 
+def next_update_date(claim: MongoClaim, today: datetime.date) -> Optional[datetime.date]:
+    """Compute the next planned update date strictly after or on `today`.
+
+    Mirrors the scheduling semantics in `claim_needs_update`:
+    - > 90 day window: 30-day cadence up to the completion date, then endpoint
+    - <= 14 day window: only endpoint at completion date
+    - else (<= 90 and > 14): midpoint, then endpoint at completion date
+    Returns None when no sensible future date can be determined.
+    """
+    if isinstance(claim.completion_condition_date, Date_Delta):
+        claim.completion_condition_date = claim.completion_condition_date._resolve_date()
+
+    assert isinstance(claim.completion_condition_date, datetime.date), (
+        f'Unexpected date type: {type(claim.completion_condition_date)} - {claim.completion_condition_date}'
+    )
+
+    completion = claim.completion_condition_date
+
+    # If we're already at/past completion, endpoint is the intended next action.
+    if today >= completion:
+        return today
+
+    timespan = completion - claim.article_date
+
+    # Monthly cadence for long windows
+    if timespan.days > 90:
+        # First 30-day boundary strictly after today (or on today if exact)
+        step = claim.article_date + datetime.timedelta(days=30)
+        while step <= today:
+            step += datetime.timedelta(days=30)
+        # Do not schedule beyond completion; use endpoint on completion date
+        return step if step <= completion else completion
+
+    # Only endpoint for short windows
+    if timespan.days <= 14:
+        return completion
+
+    # Single midpoint update, then endpoint
+    midpoint_days = timespan.days // 2
+    midpoint = claim.article_date + datetime.timedelta(days=midpoint_days)
+    if today < midpoint:
+        return midpoint
+    # After midpoint but before completion, the next is the endpoint
+    return completion
+
 def _checkin_template() -> str:
     tpl_path = os.path.join(_REPO_ROOT, 'prompts', 'regular_checkin.md')
     with open(tpl_path, 'r', encoding='utf-8') as fh:
@@ -263,6 +308,76 @@ def main():
     if db is None:
         logger.error('Mongo DB not available in util.mongo')
         return []
+
+    # Proactively schedule future follow-ups so the UI can display them.
+    proactively_scheduled = 0
+    try:
+        followups_coll = db.get_collection('silver_followups')
+        for raw, claim in claim_pairs:
+            try:
+                upd_type = claim_needs_update(claim)
+            except Exception:
+                logger.exception('Failed to evaluate update type for claim %s', raw.get('_id'))
+                continue
+
+            if upd_type != UpdateType.NO_UPDATE:
+                continue
+
+            try:
+                nxt = next_update_date(claim, pipeline_today)
+            except Exception:
+                logger.exception('Failed computing next update date for claim %s', raw.get('_id'))
+                nxt = None
+
+            if nxt is None:
+                continue
+
+            # Skip if there's already an unprocessed followup in the future (or today)
+            try:
+                followup_filter = {
+                    'claim_id': raw.get('_id'),
+                    'processed_at': {'$exists': False},
+                    'follow_up_date': {'$gte': pipeline_today},
+                }
+                try:
+                    followup_filter = mongo.normalize_dates(followup_filter)
+                except Exception:
+                    logger.exception('normalize_dates failed for proactive followup filter; using raw filter')
+                existing = followups_coll.count_documents(followup_filter)
+            except Exception:
+                logger.exception('Failed checking existing followups for claim %s', raw.get('_id'))
+                existing = 0
+
+            if existing:
+                continue
+
+            # Insert a proactive followup record
+            follow_doc = {
+                'claim_id': raw.get('_id'),
+                'claim_text': getattr(claim, 'claim', ''),
+                'follow_up_date': nxt,
+                'article_id': getattr(claim, 'article_id', ''),
+                'article_link': getattr(claim, 'article_link', ''),
+                'model_output': f'Scheduled proactively on {pipeline_today.isoformat()} for next planned update',
+                'created_at': datetime.datetime.utcnow(),
+            }
+
+            try:
+                follow_obj = SilverFollowup(**follow_doc)
+                final_follow = follow_obj.model_dump() if hasattr(follow_obj, 'model_dump') else follow_obj.dict()
+                try:
+                    final_follow = mongo.normalize_dates(final_follow)
+                except Exception:
+                    logger.exception('Failed to normalize dates for proactive silver_followup; inserting raw doc')
+                followups_coll.insert_one(final_follow)
+                proactively_scheduled += 1
+            except Exception:
+                logger.exception('Failed inserting proactive followup for claim %s', raw.get('_id'))
+
+        if proactively_scheduled:
+            logger.info(f'Proactively scheduled {proactively_scheduled} future follow-ups')
+    except Exception:
+        logger.exception('Unexpected error while proactively scheduling follow-ups')
 
     try:
         followup_filter = {

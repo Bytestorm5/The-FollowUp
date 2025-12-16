@@ -64,3 +64,45 @@ export async function getSilverClaimsCollection(): Promise<Collection<SilverClai
 }
 
 export { ObjectId };
+
+export interface SilverFollowup {
+  _id?: ObjectId;
+  claim_id: string | ObjectId;
+  claim_text: string;
+  follow_up_date: Date | string;
+  article_id: string | ObjectId;
+  article_link: string;
+  model_output?: unknown;
+  created_at?: Date | string;
+  processed_at?: Date | string | null;
+  processed_update_id?: string | ObjectId | null;
+}
+
+export async function getSilverFollowupsCollection(): Promise<Collection<SilverFollowup>> {
+  const db = await getDb();
+  return db.collection<SilverFollowup>("silver_followups");
+}
+
+export interface ModelResponseOutput {
+  verdict: "complete" | "in_progress" | "failed";
+  text?: string | null;
+  sources?: string[] | null;
+  follow_up_date?: string | Date | null;
+}
+
+export interface SilverUpdate {
+  _id?: ObjectId;
+  claim_id: string | ObjectId;
+  claim_text: string;
+  article_id: string | ObjectId;
+  article_link: string;
+  article_date?: Date | string | null;
+  model_output: ModelResponseOutput | string;
+  verdict: "complete" | "in_progress" | "failed";
+  created_at: Date | string;
+}
+
+export async function getSilverUpdatesCollection(): Promise<Collection<SilverUpdate>> {
+  const db = await getDb();
+  return db.collection<SilverUpdate>("silver_updates");
+}

@@ -57,12 +57,12 @@ export default async function FeedPage({
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
-      <aside aria-hidden className="hidden xl:block fixed left-6 top-28 z-10 w-64">
+      {/* <aside aria-hidden className="hidden xl:block fixed left-6 top-28 z-10 w-64">
         <div className="h-[600px] w-full rounded-md border border-[var(--color-border)] bg-white/60 shadow-sm"></div>
       </aside>
       <aside aria-hidden className="hidden xl:block fixed right-6 top-28 z-10 w-64">
         <div className="h-[600px] w-full rounded-md border border-[var(--color-border)] bg-white/60 shadow-sm"></div>
-      </aside>
+      </aside> */}
 
       <div className="mx-auto max-w-4xl px-4 py-10">
         <header className="mb-8">

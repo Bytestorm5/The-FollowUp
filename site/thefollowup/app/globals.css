@@ -63,3 +63,52 @@ h1, h2, h3, h4 {
   background: linear-gradient(to right, transparent, rgba(0,0,0,0.75) 50%, transparent);
   pointer-events: none;
 }
+
+/* Timeline styles */
+.timeline {
+  position: relative;
+}
+.timeline-item {
+  position: relative;
+  padding-left: 1.5rem; /* space for the marker */
+  margin-bottom: 1.25rem;
+}
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: 0.25rem;
+  top: -1rem; /* extend upward to connect with previous */
+  bottom: -0.25rem; /* extend downward to connect with next */
+  border-left: 1px solid var(--color-border);
+}
+.timeline-item.first::before {
+  top: 0.75rem; /* don't extend above the first item marker */
+}
+.timeline-item.last::before {
+  bottom: 0.75rem; /* don't extend below the last item marker */
+}
+.timeline-item.scheduled::before {
+  border-left: 1px dashed var(--color-accent);
+}
+.timeline-item.overdue::before {
+  border-left-color: var(--color-status-failed);
+}
+.timeline-dot {
+  position: absolute;
+  left: 0rem;
+  top: 0.6rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--color-primary);
+  border: 2px solid var(--color-primary);
+}
+.timeline-dot.scheduled {
+  background-color: transparent;
+  border-color: var(--color-accent);
+  border-style: dashed;
+}
+.timeline-dot.overdue {
+  background-color: var(--color-status-failed);
+  border-color: var(--color-status-failed);
+}

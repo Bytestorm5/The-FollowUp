@@ -19,9 +19,16 @@ export default function NavBar() {
           <Link href="/feed" className="text-sm font-medium text-foreground hover:opacity-80">
             Feed
           </Link>
-          <Link href="#" className="text-sm font-medium text-foreground hover:opacity-80">
-            Countdowns
-          </Link>
+          <div className="relative group">
+            <Link href="/countdowns" className="text-sm font-medium text-foreground hover:opacity-80">
+              Countdowns
+            </Link>
+            <div className="invisible absolute left-1/2 z-50 mt-2 w-44 -translate-x-1/2 rounded-md border border-[var(--color-border)] bg-background p-1 text-sm opacity-0 shadow-md transition group-hover:visible group-hover:opacity-100">
+              <Link href="/countdowns/past" className="block rounded px-3 py-2 hover:bg-black/5">
+                Past Countdowns
+              </Link>
+            </div>
+          </div>
           <Link href="#" className="text-sm font-medium text-foreground hover:opacity-80">
             About
           </Link>
