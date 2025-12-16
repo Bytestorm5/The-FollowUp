@@ -1,6 +1,6 @@
+import Link from "next/link";
 import { getBronzeCollection, type BronzeLink } from "@/lib/mongo";
 import Pagination from "@/components/Pagination";
-import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +57,13 @@ export default async function FeedPage({
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
+      <aside aria-hidden className="hidden xl:block fixed left-6 top-28 z-10 w-64">
+        <div className="h-[600px] w-full rounded-md border border-[var(--color-border)] bg-white/60 shadow-sm"></div>
+      </aside>
+      <aside aria-hidden className="hidden xl:block fixed right-6 top-28 z-10 w-64">
+        <div className="h-[600px] w-full rounded-md border border-[var(--color-border)] bg-white/60 shadow-sm"></div>
+      </aside>
+
       <div className="mx-auto max-w-4xl px-4 py-10">
         <header className="mb-8">
           <div className="dateline mb-1">Bronze links · {total} total</div>
@@ -89,10 +96,19 @@ export default async function FeedPage({
                     )}
                   </div>
                   <h2 className="mt-1 text-xl font-semibold text-primary" style={{ fontFamily: "var(--font-serif)" }}>
-                    <Link href={it.link} target="_blank" className="hover:underline">
+                    <Link href={`/article/${(it as any)._id?.toString?.()}`} className="hover:underline">
                       {it.title}
                     </Link>
                   </h2>
+                  <div className="mt-2 text-sm">
+                    <Link href={`/article/${(it as any)._id?.toString?.()}`} className="text-accent hover:underline">
+                      View details
+                    </Link>
+                    {" · "}
+                    <a href={it.link} target="_blank" className="hover:underline">
+                      Original
+                    </a>
+                  </div>
                   {it.tags && it.tags.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {it.tags.map((t, i) => (

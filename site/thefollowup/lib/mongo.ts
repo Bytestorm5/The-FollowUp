@@ -44,3 +44,23 @@ export async function getBronzeCollection(): Promise<Collection<BronzeLink>> {
   const db = await getDb();
   return db.collection<BronzeLink>("bronze_links");
 }
+
+export interface SilverClaim {
+  _id?: ObjectId;
+  claim: string;
+  verbatim_claim: string;
+  type: "goal" | "promise" | "statement";
+  completion_condition: string;
+  completion_condition_date?: Date | string | null;
+  article_date: Date | string;
+  article_id: string | ObjectId;
+  article_link: string;
+  date_past: boolean;
+}
+
+export async function getSilverClaimsCollection(): Promise<Collection<SilverClaim>> {
+  const db = await getDb();
+  return db.collection<SilverClaim>("silver_claims");
+}
+
+export { ObjectId };
