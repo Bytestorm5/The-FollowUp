@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/* Tailwind v4 theme tokens for "Modern Newsroom" */
+@theme inline {
+  /* Base colors */
+  --color-background: #FFFCF6; /* newsroom paper off-white */
+  --color-foreground: #1f2937; /* slate-800 body text */
+  --color-primary: #0f172a;    /* deep navy/slate for headers & nav */
+  --color-accent: #f59e0b;     /* amber for countdowns / due soon */
+
+  /* Status colors */
+  --color-status-succeeded: #22c55e;   /* muted green */
+  --color-status-technicality: #fbbf24;/* amber/yellow */
+  --color-status-failed: #ef4444;      /* muted red */
+  --color-status-pending: #64748b;     /* cool gray/blue */
+
+  /* Typography */
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+
+  /* UI tokens */
+  --color-border: #e5e7eb; /* gray-200 for rules/cards */
+  --radius-card: 0.5rem;   /* slightly rounded card edges */
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* Subtle newspaper-style rules */
+hr {
+  border-color: var(--color-border);
+  opacity: 0.8;
+}
+
+/* Optional helpers for cards using tokens */
+.card {
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  background-color: var(--color-background);
+}
+
+/* Editorial serif for headings, primary tone */
+h1, h2, h3, h4 {
+  font-family: var(--font-serif);
+  color: var(--color-primary);
+}
+
+/* Small dateline helper (date, source, politician) */
+.dateline {
+  font-size: 0.8125rem; /* ~13px */
+  color: var(--color-status-pending);
+}
+
+/* Header bottom border that fades from center to transparent sides */
+.fade-border-b {
+  position: relative;
+}
+.fade-border-b::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(0,0,0,0.75) 50%, transparent);
+  pointer-events: none;
+}
