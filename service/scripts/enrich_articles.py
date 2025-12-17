@@ -5,9 +5,10 @@ import logging
 from typing import Any, Dict, List, Tuple
 from dotenv import load_dotenv
 
-load_dotenv()
 from openai import OpenAI
 from bs4 import BeautifulSoup
+
+load_dotenv()
 
 _HERE = os.path.dirname(__file__)
 _SERVICE_ROOT = os.path.abspath(os.path.join(_HERE, '..'))
@@ -22,6 +23,9 @@ from util.scrape_utils import playwright_get
 logger = logging.getLogger(__name__)
 
 _OPENAI_CLIENT = OpenAI()
+
+# Manually toggle to True to purge enrichment fields from all documents
+RESET_ENRICHMENT_FIELDS: bool = False
 
 
 def _load_template() -> str:
@@ -55,12 +59,12 @@ def _fetch_url_text(url: str) -> str:
         html = resp.content.decode("utf-8", errors="ignore")
         soup = BeautifulSoup(html, "html.parser")
         # Remove scripts/styles
-        for tag in soup(["script", "style", "noscript"]):
+        for tag in soup(["script", "style", "noscript", "header", "head", "footer"]):
             tag.decompose()
         # Prefer <article> content
-        container = soup.find("article") or soup.find("main") or soup.body
-        if not container:
-            return soup.get_text("\n", strip=True)
+
+        
+        return soup.get_text("\n", strip=True)
         # Gather paragraphs and list items as lines
         lines: List[str] = []
         for el in container.find_all(["h1", "h2", "h3", "h4", "p", "li", "blockquote"]):
@@ -125,6 +129,24 @@ def run(batch: int = 50):
     coll = getattr(mongo, 'bronze_links', None)
     if coll is None:
         logger.error('bronze_links collection not available')
+        return
+
+    if RESET_ENRICHMENT_FIELDS:
+        try:
+            result = coll.update_many(
+                {},
+                {
+                    '$unset': {
+                        'clean_markdown': 1,
+                        'summary_paragraph': 1,
+                        'key_takeaways': 1,
+                    }
+                }
+            )
+            modified = getattr(result, 'modified_count', 0)
+            logger.info('Purged enrichment fields from %d document(s)', modified)
+        except Exception:
+            logger.exception('Failed to purge enrichment fields from bronze_links')
         return
 
     template = _load_template()

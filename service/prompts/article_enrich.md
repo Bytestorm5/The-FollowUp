@@ -11,3 +11,5 @@ Constraints:
 - Do not add additional formatting flairs if it is not present in the original article. We should aim for the most simple formatting possible.
 - If the raw content is already clean text, format it as markdown sections without changing wording.
 - Keep URLs intact where present.
+
+Note that there may be artifacts in the given text from the HTML parsing. This may be organizational elements like navbars or other popups in the site. Try to stay focused on the primary page content as much as possible.
