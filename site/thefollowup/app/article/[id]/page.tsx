@@ -103,11 +103,9 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
         </h1>
         <hr className="mt-4" />
 
-        <section className="mt-6">
-          <h2 className="text-lg font-semibold">Related items</h2>
-          {claims.length === 0 ? (
-            <p className="mt-2 text-foreground/70">No extracted claims yet.</p>
-          ) : (
+        
+        {claims.length !== 0 ? (
+          <section className="mt-6">
             <ul className="mt-3 list-disc space-y-3 pl-5">
               {claims.map((c) => (
                 <li key={(c as any)._id?.toString?.() ?? c.claim} className="leading-relaxed">
@@ -130,8 +128,9 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
                 </li>
               ))}
             </ul>
-          )}
-        </section>
+          </section>
+        ) : (<span></span>)}
+        
 
         {/* Key takeaways */}
         {Array.isArray(doc.key_takeaways) && doc.key_takeaways.length > 0 && (

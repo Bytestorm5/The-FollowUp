@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Countdown from "@/components/Countdown";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsCollection, getSilverUpdatesCollection, ObjectId, type SilverClaim, type SilverFollowup, type SilverUpdate } from "@/lib/mongo";
 
 export const dynamic = "force-dynamic";
@@ -173,6 +175,33 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
           <div className="mt-4 rounded-md border border-[var(--color-border)] bg-white/60 p-3 text-sm text-foreground/80">
             <div className="mb-1 text-xs uppercase tracking-wide text-foreground/70">Source summary</div>
             {sourceSummary}
+          </div>
+        )}
+
+        {/* Latest fact check text (statements) */}
+        {claim.type === "statement" && latest && (
+          <div className="mt-4 rounded-md border border-[var(--color-border)] bg-white/60 p-3">
+            <div className="mb-2 text-xs uppercase tracking-wide text-foreground/70">Latest fact check</div>
+            {(() => {
+              const mo = latest.model_output as any;
+              const text: string | undefined = typeof mo === "string" ? mo : mo?.text;
+              const sources: string[] | undefined = typeof mo === "object" && mo?.sources ? mo.sources : undefined;
+              return (
+                <div className="prose prose-neutral max-w-none text-sm">
+                  {text ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown> : <p className="text-foreground/70">No details provided.</p>}
+                  {sources && sources.length > 0 && (
+                    <div className="mt-2">
+                      <div className="text-xs font-medium">Sources</div>
+                      <ul className="mt-1 list-disc pl-5">
+                        {sources.map((s, i) => (
+                          <li key={i}><a className="hover:underline" href={s} target="_blank" rel="noreferrer">{s}</a></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 

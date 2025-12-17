@@ -9,6 +9,16 @@ from dotenv import load_dotenv
 load_dotenv()
 from openai import OpenAI
 
+# Prefer pydantic-core ValidationError; fallback to pydantic's if needed
+try:
+    from pydantic_core import ValidationError as _PydValidationError  # type: ignore
+except Exception:
+    try:
+        from pydantic import ValidationError as _PydValidationError  # type: ignore
+    except Exception:  # pragma: no cover
+        class _PydValidationError(Exception):
+            pass
+
 # OpenAI client (reads OPENAI_API_KEY, OPENAI_ORG, OPENAI_PROJECT from env)
 _OPENAI_CLIENT = OpenAI()
 _HERE = os.path.dirname(__file__)
@@ -136,26 +146,42 @@ def _fallback_process_with_responses(
             content = template.replace('{{SCHEMA}}', schema_json).replace('{{ARTICLE}}', doc_format)
 
             # Use Responses API with structured parsing to ClaimProcessingResult
-            try:
-                resp = _OPENAI_CLIENT.responses.parse(
-                    model=model,
-                    input=content,
-                    text_format=ClaimProcessingResult,
-                )
-            except Exception:
-                logger.exception('Responses.parse call failed for article %s', article_id)
-                continue
+            max_retries = 3
+            parsed = None
+            for attempt in range(1, max_retries + 1):
+                try:
+                    resp = _OPENAI_CLIENT.responses.parse(
+                        model=model,
+                        input=content,
+                        text_format=ClaimProcessingResult,
+                    )
+                    parsed = getattr(resp, 'output_parsed', None) or (
+                        resp.get('output_parsed') if isinstance(resp, dict) else None
+                    )
+                    if parsed is None:
+                        raise ValueError('No parsed output received from responses API')
 
-            parsed = getattr(resp, 'output_parsed', None) or (resp.get('output_parsed') if isinstance(resp, dict) else None)
+                    if not isinstance(parsed, ClaimProcessingResult):
+                        parsed = _pydantic_parse_result(parsed)
+                    # Success if we reached here
+                    break
+                except _PydValidationError:
+                    logger.warning(
+                        'ValidationError for article %s on attempt %d/%d; retrying',
+                        article_id, attempt, max_retries,
+                    )
+                    if attempt < max_retries:
+                        time.sleep(1)
+                        continue
+                    logger.exception('ValidationError persisted after %d attempts for article %s', max_retries, article_id)
+                    parsed = None
+                    break
+                except Exception:
+                    logger.exception('Responses.parse call failed for article %s (attempt %d)', article_id, attempt)
+                    parsed = None
+                    break
+
             if parsed is None:
-                logger.error('No parsed output for article %s from responses API', article_id)
-                continue
-
-            try:
-                if not isinstance(parsed, ClaimProcessingResult):
-                    parsed = _pydantic_parse_result(parsed)
-            except Exception:
-                logger.exception('Failed to coerce parsed output into ClaimProcessingResult for article %s', article_id)
                 continue
 
             article_link = doc.get('link', '')
@@ -338,7 +364,7 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
         _OPENAI_CLIENT,
         batch_id,
         poll_interval=poll_interval,
-        timeout=60 * 30,
+        timeout=60 * 5,
         expected_total=len(request_lines),
         on_timeout=_fallback,
     )

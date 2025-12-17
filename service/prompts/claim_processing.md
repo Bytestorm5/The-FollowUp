@@ -66,6 +66,8 @@ Routing/UI fields
 Verbatim requirement
 - verbatim_claim must be an exact excerpt from the article (no paraphrase). If you cannot quote cleanly, do not include the claim.
 
+In contrast, the claim field should be a single sentence that conveys the claim without assuming any context from the article. The reader should be able to get a general sense of what the claim does without having ever seen the article. You can assume knowledge of public figures, departments, and common acronyms.
+
 Now produce output that exactly matches the following JSON schema:
 
 {{SCHEMA}}
