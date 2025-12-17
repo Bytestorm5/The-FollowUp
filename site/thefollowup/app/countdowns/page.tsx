@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSilverClaimsCollection, getSilverFollowupsCollection, getSilverUpdatesCollection, type SilverClaim, type SilverFollowup, type SilverUpdate, ObjectId } from "@/lib/mongo";
 import Countdown from "@/components/Countdown";
+import { parseISODate, searchClaimIdsByText } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,15 @@ function typePriority(t: SilverClaim["type"]) {
   return 2; // statements are excluded, but keep fallback
 }
 
-export default async function CountdownsPage() {
+export default async function CountdownsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const q = String(sp?.q ?? "").trim();
+  const from = parseISODate(sp?.from);
+  const to = parseISODate(sp?.to);
   const claimsColl = await getSilverClaimsCollection();
   const followupsColl = await getSilverFollowupsCollection();
   const updatesColl = await getSilverUpdatesCollection();
@@ -95,6 +104,25 @@ export default async function CountdownsPage() {
       return new Date(a.dueISO).getTime() - new Date(b.dueISO).getTime();
     });
 
+  // Text search via Atlas Search (claims/updates) -> filter by claim id
+  let idsBySearch: Set<string> | null = null;
+  if (q) idsBySearch = await searchClaimIdsByText(q);
+
+  const rowsFiltered = rows.filter((r) => {
+    if (from && new Date(r.dueISO).getTime() < from.getTime()) return false;
+    if (to && new Date(r.dueISO).getTime() > to.getTime()) return false;
+    if (q) {
+      if (idsBySearch && idsBySearch.size > 0) {
+        if (!idsBySearch.has(r.id)) return false;
+      } else {
+        const needle = q.toLowerCase();
+        const hay = (r.claim || "").toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+    }
+    return true;
+  });
+
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-4 py-8">
@@ -104,11 +132,31 @@ export default async function CountdownsPage() {
         </h1>
         <hr className="mt-4" />
 
-        {rows.length === 0 ? (
+        {/* Filters */}
+        <form method="get" className="mt-4 flex flex-wrap items-end gap-3">
+          <div className="flex min-w-[200px] flex-1 flex-col">
+            <label htmlFor="q" className="text-xs text-foreground/70">Search</label>
+            <input id="q" name="q" defaultValue={q} placeholder="Search text..." className="w-full rounded-md border px-2 py-1 text-sm" />
+          </div>
+          <div className="flex flex-col">
+            <label htmlFor="from" className="text-xs text-foreground/70">From</label>
+            <input id="from" name="from" type="date" defaultValue={from ? from.toISOString().slice(0,10) : ""} className="rounded-md border px-2 py-1 text-sm" />
+          </div>
+          <div className="flex flex-col">
+            <label htmlFor="to" className="text-xs text-foreground/70">To</label>
+            <input id="to" name="to" type="date" defaultValue={to ? to.toISOString().slice(0,10) : ""} className="rounded-md border px-2 py-1 text-sm" />
+          </div>
+          <button type="submit" className="rounded-md border px-3 py-2 text-sm hover:bg-black/5">Apply</button>
+          {(q || from || to) && (
+            <Link href="/countdowns" className="text-sm hover:underline">Reset</Link>
+          )}
+        </form>
+
+        {rowsFiltered.length === 0 ? (
           <p className="mt-6 text-foreground/70">No upcoming deadlines yet.</p>
         ) : (
           <ul className="mt-6 space-y-4">
-            {rows.map((r) => (
+            {rowsFiltered.map((r) => (
               <li key={r.id} className="card border border-[var(--color-border)] p-4">
                 <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wide text-foreground/70">
                   <span>{r.type}</span>

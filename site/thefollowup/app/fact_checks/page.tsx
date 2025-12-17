@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getSilverClaimsCollection, getSilverUpdatesCollection, ObjectId, type SilverClaim, type SilverUpdate } from "@/lib/mongo";
+import { parseISODate, searchClaimIdsByText } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,8 @@ export default async function FactChecksPage({
   const sp = await searchParams;
   const q = String(sp?.q ?? "").trim();
   const v = String(sp?.v ?? "").toLowerCase(); // "true" | "false" | "complicated" | ""
+  const from = parseISODate(sp?.from);
+  const to = parseISODate(sp?.to);
   const claimsColl = await getSilverClaimsCollection();
   const updatesColl = await getSilverUpdatesCollection();
 
@@ -68,39 +71,7 @@ export default async function FactChecksPage({
 
   // MongoDB Atlas Search (fuzzy) for q against claims and updates
   let idsBySearch: Set<string> | null = null;
-  if (q) {
-    try {
-      const indexName = process.env.MONGO_SEARCH_INDEX || "default";
-      const claimMatches = await (await getSilverClaimsCollection()).aggregate([
-        {
-          $search: {
-            index: indexName,
-            text: { query: q, path: ["claim", "verbatim_claim"], fuzzy: {}, matchCriteria: "any" },
-          },
-        },
-        { $project: { _id: 1 } },
-      ]).toArray();
-
-      const updateMatches = await (await getSilverUpdatesCollection()).aggregate([
-        {
-          $search: {
-            index: indexName,
-            text: { query: q, path: ["model_output", "claim_text"], fuzzy: {}, matchCriteria: "any" },
-          },
-        },
-        { $project: { claim_id: 1 } },
-        { $group: { _id: "$claim_id" } },
-      ]).toArray();
-
-      idsBySearch = new Set<string>();
-      for (const d of claimMatches) idsBySearch.add(String(d._id));
-      for (const d of updateMatches) idsBySearch.add(String(d._id));
-    } catch {
-      // If Atlas Search isn't available, fall back to substring filtering below
-      console.log("Atlas Search Failed")
-      idsBySearch = null;
-    }
-  }
+  if (q) idsBySearch = await searchClaimIdsByText(q);
   // Apply filters
   const rowsFiltered = rows.filter((r) => {
     // verdict filter
@@ -108,6 +79,9 @@ export default async function FactChecksPage({
       const label = verdictLabel(r.latest.verdict).toLowerCase();
       if (label !== v) return false;
     }
+    // date filter on latest update timestamp
+    if (from && new Date(r.latest.created_at as any).getTime() < from.getTime()) return false;
+    if (to && new Date(r.latest.created_at as any).getTime() > to.getTime()) return false;
     // if Atlas Search ran, constrain to those ids; otherwise, substring fallback
     if (q) {
       if (idsBySearch && idsBySearch.size > 0) {
@@ -148,8 +122,16 @@ export default async function FactChecksPage({
             <label htmlFor="q" className="text-xs text-foreground/70">Search</label>
             <input id="q" name="q" defaultValue={q} placeholder="Search text..." className="w-full rounded-md border px-2 py-1 text-sm" />
           </div>
+          <div className="flex flex-col">
+            <label htmlFor="from" className="text-xs text-foreground/70">From</label>
+            <input id="from" name="from" type="date" defaultValue={from ? from.toISOString().slice(0,10) : ""} className="rounded-md border px-2 py-1 text-sm" />
+          </div>
+          <div className="flex flex-col">
+            <label htmlFor="to" className="text-xs text-foreground/70">To</label>
+            <input id="to" name="to" type="date" defaultValue={to ? to.toISOString().slice(0,10) : ""} className="rounded-md border px-2 py-1 text-sm" />
+          </div>
           <button type="submit" className="rounded-md border px-3 py-2 text-sm hover:bg-black/5">Apply</button>
-          {(v || q) && (
+          {(v || q || from || to) && (
             <Link href="/fact_checks" className="text-sm hover:underline">Reset</Link>
           )}
         </form>
