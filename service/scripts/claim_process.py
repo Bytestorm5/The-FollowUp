@@ -338,7 +338,7 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
         _OPENAI_CLIENT,
         batch_id,
         poll_interval=poll_interval,
-        timeout=60 * 1,
+        timeout=60 * 30,
         expected_total=len(request_lines),
         on_timeout=_fallback,
     )

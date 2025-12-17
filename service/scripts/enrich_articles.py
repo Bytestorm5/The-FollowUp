@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 from openai import OpenAI
+from bs4 import BeautifulSoup
 
 _HERE = os.path.dirname(__file__)
 _SERVICE_ROOT = os.path.abspath(os.path.join(_HERE, '..'))
@@ -16,6 +17,7 @@ if _SERVICE_ROOT not in sys.path:
 from util import mongo
 from models import ArticleEnrichment, MongoArticle
 from util import openai_batch as obatch
+from util.scrape_utils import playwright_get
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +35,42 @@ def _build_input(article: Dict[str, Any], template: str) -> str:
     date = article.get('date', '')
     link = article.get('link', '')
     tags = ','.join(article.get('tags', []) or [])
-    raw = article.get('raw_content', '')
-    body = f"Title: {title}\nDate: {date}\nTags: {tags}\nSource: {link}\n\nRaw Content:\n{raw}"
+    # Prefer fetching live content from the source link
+    fetched = _fetch_url_text(link)
+    if not fetched:
+        fetched = article.get('raw_content', '')
+    body = f"Title: {title}\nDate: {date}\nTags: {tags}\nSource: {link}\n\nSource Content (fetched):\n{fetched}"
     return template + "\n\n" + body
 
 
 def _needs_enrichment(doc: Dict[str, Any]) -> bool:
     return not (doc.get('clean_markdown') and doc.get('summary_paragraph') and doc.get('key_takeaways'))
+
+
+def _fetch_url_text(url: str) -> str:
+    if not url:
+        return ""
+    try:
+        resp = playwright_get(url, timeout=20)
+        html = resp.content.decode("utf-8", errors="ignore")
+        soup = BeautifulSoup(html, "html.parser")
+        # Remove scripts/styles
+        for tag in soup(["script", "style", "noscript"]):
+            tag.decompose()
+        # Prefer <article> content
+        container = soup.find("article") or soup.find("main") or soup.body
+        if not container:
+            return soup.get_text("\n", strip=True)
+        # Gather paragraphs and list items as lines
+        lines: List[str] = []
+        for el in container.find_all(["h1", "h2", "h3", "h4", "p", "li", "blockquote"]):
+            text = el.get_text(" ", strip=True)
+            if text:
+                lines.append(text)
+        return "\n\n".join(lines) if lines else container.get_text("\n", strip=True)
+    except Exception:
+        logger.exception("Failed to fetch or parse article url: %s", url)
+        return ""
 
 
 def _enrich(article: Dict[str, Any], template: str) -> ArticleEnrichment | None:
@@ -158,7 +189,7 @@ def run(batch: int = 50):
         _OPENAI_CLIENT,
         batch_id,
         poll_interval=5,
-        timeout=60 * 1,
+        timeout=60 * 30,
         expected_total=len(request_lines),
         on_timeout=_fallback,
     )
