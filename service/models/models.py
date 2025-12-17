@@ -36,6 +36,10 @@ class MongoArticle(BaseModel):
     raw_content: str = Field(..., description="Raw content of the news article")
     process_posturing: bool = False
     claim_processed: Optional[bool] = Field(None, description="Flag indicating if claims have been extracted from the article.")
+    # Enrichment fields (generated in preprocessing step)
+    clean_markdown: Optional[str] = Field(None, description="Verbatim clean text of the article, formatted as Markdown")
+    summary_paragraph: Optional[str] = Field(None, description="One-paragraph summary of the article")
+    key_takeaways: Optional[List[str]] = Field(None, description="Bullet point key takeaways from the article")
     
     def __init__(self, **kwargs):
         if "_id" in kwargs:
@@ -68,19 +72,101 @@ class Date_Delta(BaseModel):
             new_date = new_date.replace(year=new_date.year + self.years_delta)
         return new_date
     
+Mechanism = Literal[
+    "direct_action",     # executed under the actor's own authority immediately (EO signed, rule issued, funds released, etc.)
+    "directive",         # actor directs another entity to act (EO directs agency, memo instructs office, etc.)
+    "enforcement",       # investigations, prosecutions, penalties, inspections, compliance actions
+    "funding",           # grants, disbursements, appropriations execution, contracts
+    "rulemaking",        # proposed/final rules, guidance updates, regulatory processes
+    "litigation",        # lawsuit filed, settlement, consent decree, court motion
+    "oversight",         # audits, reports, inspector general, hearings, reviews
+    "other",
+]
+
+Priority = Literal["high", "medium", "low"]
+
 class ClaimProcessingStep(BaseModel):
-    claim: str = Field(..., description="The claim being processed")
-    verbatim_claim: str = Field(..., description="The verbatim version of the claim")
-    type: Literal["goal", "promise", "statement"] = Field(..., description="Type of the claim. It can be 'goal', 'promise', or 'statement'. Goals are general objectives, promises are specific commitments with a deadline and a measurable outcome, and statements are factual assertions.")
-    completion_condition: str = Field(..., description="Condition(s) that must be met to consider the claim true / goal achieved / promise fulfilled")
-    completion_condition_date: Optional[Union[datetime.date, Date_Delta]] = Field(..., description="Date by which the completion condition must be met. Only fill in if the claim specifies a deadline or specific time window (e.g. '90 days', 'in March', etc).")
-    
+    claim: str = Field(..., description="Canonical short description of the extracted claim (may be lightly normalized).")
+    verbatim_claim: str = Field(..., description="Exact excerpt from the article supporting the claim (no paraphrase).")
+
+    type: Literal["goal", "promise", "statement"] = Field(
+        ...,
+        description=(
+            "Classification axis for downstream scheduling. "
+            "statement = operationally meaningful verifiable claim about what is/was done or is true; "
+            "goal = vague/aspirational objective not verifiable as complete; "
+            "promise = future deliverable with an explicit deadline/time window and a measurable outcome."
+        ),
+    )
+
+    completion_condition: str = Field(
+        ...,
+        description="Condition(s) that must be met to consider the claim true / goal achieved / promise fulfilled.",
+    )
+
+    # DEADLINE (not event date)
+    completion_condition_date: Optional[Union[datetime.date, "Date_Delta"]] = Field(
+        ...,
+        description=(
+            "Deadline/time window by which the completion condition must be met. "
+            "PROMISE ONLY. Must be explicitly stated in the text (e.g., 'within 90 days', 'by March 2026'). "
+            "Never set to the article date or 'today' unless the text explicitly sets that deadline."
+        ),
+    )
+
+    # EVENT/EFFECTIVE DATE (not deadline)
+    event_date: Optional[Union[datetime.date, "Date_Delta"]] = Field(
+        ...,
+        description=(
+            "For already-taken actions (statements), the date the action occurred or became effective, "
+            "ONLY if explicitly stated in the text. Never use for promises/deadlines."
+        ),
+    )
+
+    follow_up_worthy: bool = Field(
+        ...,
+        description=(
+            "Whether this step should be queued for follow-up checks. "
+            "Almost always true for promises. For goals, true only if material and checkable later."
+            "For statements, this indicates if this statement is worth performing a fact-check on."
+        ),
+    )
+
+    priority: Priority = Field(
+        ...,
+        description=(
+            "Operational priority for UI/pipeline. "
+            "high = material policy/enforcement/funding/regulatory actions or time-bound promises; "
+            "medium = meaningful but smaller-scope; "
+            "low = background/context or record-only (prefer to omit these entirely)."
+        ),
+    )
+
+    mechanism: Optional[Mechanism] = Field(
+        None,
+        description="Optional routing hint: how the claim is executed (directive, rulemaking, enforcement, etc.).",
+    )
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        if isinstance(self.completion_condition_date, str):
-            self.completion_condition_date = datetime.date.fromisoformat(self.completion_condition_date)
-        elif isinstance(self.completion_condition_date, Date_Delta):
-            self.completion_condition_date = self.completion_condition_date._resolve_date()
+
+        # Resolve ISO dates + deltas for both date fields
+        for field_name in ("completion_condition_date", "event_date"):
+            val = getattr(self, field_name)
+            if isinstance(val, str):
+                setattr(self, field_name, datetime.date.fromisoformat(val))
+            elif val is not None and hasattr(val, "_resolve_date"):
+                setattr(self, field_name, val._resolve_date())
+
+        # Normalize semantics: deadlines are promise-only; event dates are statement-only
+        if self.type != "promise":
+            self.completion_condition_date = None
+        if self.type != "statement":
+            self.event_date = None
+
+        # Optional consistency nudge
+        if not self.follow_up_worthy and self.priority == "high":
+            self.priority = "medium"
     
 class ClaimProcessingResult(BaseModel):
     steps: List[ClaimProcessingStep] = Field(..., description="List of claim processing steps")
@@ -88,6 +174,12 @@ class ClaimProcessingResult(BaseModel):
     @classmethod
     def from_steps(cls, steps: List[ClaimProcessingStep]):
         return cls(steps=steps)    
+
+
+class ArticleEnrichment(BaseModel):
+    clean_markdown: str = Field(..., description="Verbatim clean text formatted as Markdown")
+    summary_paragraph: str = Field(..., description="A concise one-paragraph summary")
+    key_takeaways: List[str] = Field(..., description="Bullet point key takeaways")
     
     
 class MongoClaim(BaseModel):
@@ -96,11 +188,17 @@ class MongoClaim(BaseModel):
     type: Literal["goal", "promise", "statement"] = Field(..., description="Type of the claim. It can be 'goal', 'promise', or 'statement'. Goals are general objectives, promises are specific commitments with a deadline and a measurable outcome, and statements are factual assertions.")
     completion_condition: str = Field(..., description="Condition(s) that must be met to consider the claim true / goal achieved / promise fulfilled")
     completion_condition_date: Optional[Union[datetime.date, Date_Delta]] = Field(..., description="Date by which the completion condition must be met. Only fill in if the claim specifies a deadline or specific time window (e.g. '90 days', 'in March', etc).")
+    # For statements: optional event/effective date
+    event_date: Optional[Union[datetime.date, Date_Delta]] = Field(None, description="For statements, the date the action occurred/became effective if explicitly stated.")
     # Date of the article where the claim was found
     article_date: datetime.date = Field(..., description="Date of the article where the claim was found")
     article_id: str = Field(..., description="The ID of the article where the claim was found")
     article_link: str = Field(..., description="The link to the article where the claim was found")
     date_past: bool = Field(..., description="Flag indicating if the claim completion date has passed.")
+    # Optional scheduling/ops hints from processing step
+    follow_up_worthy: Optional[bool] = Field(None, description="Whether this claim should be queued for follow-up checks.")
+    priority: Optional[Priority] = Field(None, description="Operational priority for UI/pipeline.")
+    mechanism: Optional[Mechanism] = Field(None, description="Routing hint on how the claim is executed.")
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -108,6 +206,10 @@ class MongoClaim(BaseModel):
             self.completion_condition_date = datetime.date.fromisoformat(self.completion_condition_date)
         elif isinstance(self.completion_condition_date, Date_Delta):
             self.completion_condition_date = self.completion_condition_date._resolve_date()
+        if isinstance(self.event_date, str):
+            self.event_date = datetime.date.fromisoformat(self.event_date)
+        elif isinstance(self.event_date, Date_Delta):
+            self.event_date = self.event_date._resolve_date()
 
 
 class ModelResponseOutput(BaseModel):

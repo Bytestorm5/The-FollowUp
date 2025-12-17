@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Countdown from "@/components/Countdown";
-import { getSilverClaimsCollection, getSilverFollowupsCollection, getSilverUpdatesCollection, ObjectId, type SilverClaim, type SilverFollowup, type SilverUpdate } from "@/lib/mongo";
+import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsCollection, getSilverUpdatesCollection, ObjectId, type SilverClaim, type SilverFollowup, type SilverUpdate } from "@/lib/mongo";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +40,14 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   }
 
   if (!claim) return notFound();
+
+  // Source article summary
+  let sourceSummary: string | null = null;
+  try {
+    const artColl = await getBronzeCollection();
+    const art = await artColl.findOne({ _id: (() => { try { return new ObjectId(String((claim as any).article_id)); } catch { return (claim as any).article_id; } })() as any });
+    sourceSummary = (art as any)?.summary_paragraph ?? null;
+  } catch {}
 
   // Fallback next update date from followups if no completion date
   let dueISO = "";
@@ -139,14 +147,33 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                     : "var(--color-status-pending)",
               }}
             >
-              {latest.verdict.replace("_", " ")}
+              {claim.type === "statement"
+                ? (latest.verdict === "complete" ? "True" : latest.verdict === "failed" ? "False" : "Complicated")
+                : latest.verdict.replace("_", " ")}
             </span>
           </div>
         )}
         <hr className="mt-4" />
 
+        {/* Mechanism pill if present */}
+        {claim.mechanism && (
+          <div className="mt-3">
+            <span className="rounded-full border px-2 py-0.5 text-xs uppercase tracking-wide text-foreground/70">
+              {claim.mechanism}
+            </span>
+          </div>
+        )}
+
         {claim.completion_condition && (
           <p className="mt-4 text-foreground/80">{claim.completion_condition}</p>
+        )}
+
+        {/* Source summary paragraph */}
+        {sourceSummary && (
+          <div className="mt-4 rounded-md border border-[var(--color-border)] bg-white/60 p-3 text-sm text-foreground/80">
+            <div className="mb-1 text-xs uppercase tracking-wide text-foreground/70">Source summary</div>
+            {sourceSummary}
+          </div>
         )}
 
         {dueISO && (

@@ -39,33 +39,36 @@ formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
-def get_claims() -> List[Tuple[Any, MongoClaim]]:
-    cursor = mongo.silver_claims.find({
+def get_claim_groups() -> Tuple[List[Tuple[Any, MongoClaim]], List[Tuple[Any, MongoClaim]], List[Tuple[Any, MongoClaim]]]:
+    """Return (promises, goals_fu, statements_fu) groups.
+
+    - promises: always included when not past
+    - goals_fu: type=goal and follow_up_worthy=True
+    - statements_fu: type=statement and follow_up_worthy=True
+    """
+    promises_cur = mongo.silver_claims.find({
         '$and': [
-            {
-                '$or': [
-                    {
-                        'date_past': False
-                    }, {
-                        'date_past': {
-                            '$exists': False
-                        }
-                    }
-                ]
-            }, {
-                'type': 'promise'
-            }
+            {'$or': [{'date_past': False}, {'date_past': {'$exists': False}}]},
+            {'type': 'promise'},
         ]
     })
-    results = []
-    for raw in cursor:
-        try:
-            mc = MongoClaim(**raw)
-            results.append((raw, mc))
-        except Exception:
-            logger.exception(f'Invalid MongoClaim in DB: {raw.get("_id")}')
-    print(f'Found {len(results)} claims in DB')
-    return results
+    goals_cur = mongo.silver_claims.find({'type': 'goal', 'follow_up_worthy': True})
+    statements_cur = mongo.silver_claims.find({'type': 'statement', 'follow_up_worthy': True})
+
+    def _collect(cur):
+        out: List[Tuple[Any, MongoClaim]] = []
+        for raw in cur:
+            try:
+                out.append((raw, MongoClaim(**raw)))
+            except Exception:
+                logger.exception(f'Invalid MongoClaim in DB: {raw.get("_id")}')
+        return out
+
+    promises = _collect(promises_cur)
+    goals_fu = _collect(goals_cur)
+    statements_fu = _collect(statements_cur)
+    logger.info(f'Found {len(promises)} promises, {len(goals_fu)} goals(follow_up_worthy), {len(statements_fu)} statements(follow_up_worthy).')
+    return promises, goals_fu, statements_fu
 
 
 def _get_pipeline_today():
@@ -279,6 +282,11 @@ def _endpoint_template() -> str:
     with open(tpl_path, 'r', encoding='utf-8') as fh:
         return fh.read()
 
+def _fact_check_template() -> str:
+    tpl_path = os.path.join(_REPO_ROOT, 'prompts', 'fact_check.md')
+    with open(tpl_path, 'r', encoding='utf-8') as fh:
+        return fh.read()
+
 def main():
     # Chump check: convert 'promise' records with null completion_condition_date to 'goal'
     try:
@@ -293,12 +301,97 @@ def main():
     except Exception:
         logger.exception("Chump check: failed to update promise->goal records")
 
-    # Build regular claim update requests
-    claim_pairs = get_claims()
+    # Build update requests per type
+    promises, goals_fu, statements_fu = get_claim_groups()
     regular_checkin_template = _checkin_template()
     endpoint_checkin_template = _endpoint_template()
+    fact_check_template = _fact_check_template()
 
-    request_lines, mapping = _build_requests(claim_pairs, regular_checkin_template, endpoint_checkin_template)
+    # Promises follow existing scheduling logic
+    request_lines, mapping = _build_requests(promises, regular_checkin_template, endpoint_checkin_template)
+
+    # Goals: follow same cadence template (regular/endpoint) but we do not gate on completion date logic;
+    # include them for a regular check-in now so the model can propose next follow_up_date proactively.
+    goals_lines = []
+    goals_map = {}
+    for idx, (raw, claim) in enumerate(goals_fu):
+        claim_id = raw.get('_id')
+        custom_id = f"goal:{claim_id}:{idx}"
+        article_date = getattr(claim, 'article_date', None)
+        article_date_str = str(article_date) if article_date is not None else ''
+        content_parts = [regular_checkin_template.strip(), "", "-- Article Metadata --"]
+        content_parts.append(f"Source Article Link: {getattr(claim, 'article_link', '')}")
+        content_parts.append(f"Source Article Date: {article_date_str}")
+        content_parts.append(f"Claim: {getattr(claim, 'claim', '')}")
+        content_parts.append(f"Verbatim Quote from Article: {getattr(claim, 'verbatim_claim', '')}")
+        content_parts.append(f"Completion Condition: {getattr(claim, 'completion_condition', '')}")
+        content_parts.append(f"Projected Completion Date: {getattr(claim, 'completion_condition_date', '')}")
+        try:
+            from util.timezone import pipeline_today as _pt
+            _today = _pt()
+        except Exception:
+            _today = _get_pipeline_today()
+        content_parts.append(f"Current Date: {_today}")
+        content = "\n".join(content_parts)
+        req = {
+            "custom_id": str(custom_id),
+            "method": "POST",
+            "url": "/v1/responses",
+            "body": {
+                "model": os.environ.get('OPENAI_MODEL', 'gpt-4o-mini'),
+                "input": content,
+                "tools": [{"type": "web_search"}],
+                "tool_choice": "auto",
+                "include": ["web_search_call.action.sources"],
+            },
+        }
+        goals_lines.append(req)
+        goals_map[str(custom_id)] = (raw, claim, None)
+
+    request_lines.extend(goals_lines)
+    mapping.update(goals_map)
+
+    # Statements: fact-check when follow_up_worthy
+    stmt_lines = []
+    stmt_map = {}
+    for idx, (raw, claim) in enumerate(statements_fu):
+        claim_id = raw.get('_id')
+        custom_id = f"statement:{claim_id}:{idx}"
+        article_date = getattr(claim, 'article_date', None)
+        article_date_str = str(article_date) if article_date is not None else ''
+        event_date = getattr(claim, 'event_date', None)
+        event_date_str = str(event_date) if event_date is not None else ''
+        parts = [fact_check_template.strip(), "", "-- Statement Metadata --"]
+        parts.append(f"Source Article Link: {getattr(claim, 'article_link', '')}")
+        parts.append(f"Source Article Date: {article_date_str}")
+        parts.append(f"Claim (statement): {getattr(claim, 'claim', '')}")
+        parts.append(f"Verbatim Quote: {getattr(claim, 'verbatim_claim', '')}")
+        if event_date_str:
+            parts.append(f"Event/Effective Date (if any): {event_date_str}")
+        try:
+            from util.timezone import pipeline_today as _pt
+            _today = _pt()
+        except Exception:
+            _today = _get_pipeline_today()
+        parts.append(f"Current Date: {_today}")
+        content = "\n".join(parts)
+        req = {
+            "custom_id": str(custom_id),
+            "method": "POST",
+            "url": "/v1/responses",
+            "body": {
+                "model": os.environ.get('OPENAI_MODEL', 'gpt-4o-mini'),
+                "input": content,
+                "tools": [{"type": "web_search"}],
+                "tool_choice": "auto",
+                "include": ["web_search_call.action.sources"],
+            },
+        }
+        stmt_lines.append(req)
+        stmt_map[str(custom_id)] = (raw, claim, None)
+
+    request_lines.extend(stmt_lines)
+    mapping.update(stmt_map)
 
     # Also include any scheduled followups for today's pipeline date from `silver_followups`.
     pipeline_today = _get_pipeline_today()
@@ -313,7 +406,7 @@ def main():
     proactively_scheduled = 0
     try:
         followups_coll = db.get_collection('silver_followups')
-        for raw, claim in claim_pairs:
+        for raw, claim in promises:
             try:
                 upd_type = claim_needs_update(claim)
             except Exception:
@@ -411,7 +504,7 @@ def main():
                 'method': 'POST',
                 'url': '/v1/responses',
                 'body': {
-                    'model': os.environ.get('OPENAI_MODEL', 'gpt-4o-mini'),
+                    'model': os.environ.get('OPENAI_MODEL', 'gpt-5-mini'),
                     'input': content,
                     'tools': [{ 'type': 'web_search' }],
                     'tool_choice': 'auto',

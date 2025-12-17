@@ -50,6 +50,7 @@ def main() -> int:
 
     scripts = [
         scripts_dir / "scrape_all.py",
+        scripts_dir / "enrich_articles.py",
         scripts_dir / "claim_process.py",
         scripts_dir / "update_promises.py",
     ]

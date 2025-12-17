@@ -38,6 +38,9 @@ export interface BronzeLink {
   tags?: string[];
   raw_content?: string;
   process_posturing?: boolean;
+  clean_markdown?: string | null;
+  summary_paragraph?: string | null;
+  key_takeaways?: string[] | null;
 }
 
 export async function getBronzeCollection(): Promise<Collection<BronzeLink>> {
@@ -52,10 +55,22 @@ export interface SilverClaim {
   type: "goal" | "promise" | "statement";
   completion_condition: string;
   completion_condition_date?: Date | string | null;
+  event_date?: Date | string | null;
   article_date: Date | string;
   article_id: string | ObjectId;
   article_link: string;
   date_past: boolean;
+  follow_up_worthy?: boolean;
+  priority?: "high" | "medium" | "low";
+  mechanism?:
+    | "direct_action"
+    | "directive"
+    | "enforcement"
+    | "funding"
+    | "rulemaking"
+    | "litigation"
+    | "oversight"
+    | "other";
 }
 
 export async function getSilverClaimsCollection(): Promise<Collection<SilverClaim>> {

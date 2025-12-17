@@ -19,6 +19,7 @@ if _REPO_ROOT not in sys.path:
 from models import ClaimProcessingResult, Date_Delta, MongoClaim
 from util import mongo
 from util.mongo import normalize_dates as _normalize_dates
+from util import openai_batch as obatch
 
 logger = logging.getLogger(__name__)
 
@@ -41,46 +42,8 @@ def _get_pipeline_today():
 
 
 def _sanitize_schema_for_strict(schema: Any) -> Any:
-    """Make a JSON Schema compatible with Structured Outputs strict mode.
-
-    Structured Outputs `strict:true` requires:
-      - For every object schema: `additionalProperties` must be `false`
-      - For every object schema: all keys in `properties` must be listed in `required`
-
-    This function recursively enforces those rules on a best-effort basis.
-    """
-    def walk(node: Any) -> Any:
-        if isinstance(node, dict):
-            # Recurse into common schema containers
-            for k in ("properties", "$defs", "definitions"):
-                if k in node and isinstance(node[k], dict):
-                    node[k] = {kk: walk(vv) for kk, vv in node[k].items()}
-
-            for k in ("items", "additionalItems", "contains"):
-                if k in node:
-                    node[k] = walk(node[k])
-
-            for k in ("anyOf", "oneOf", "allOf"):
-                if k in node and isinstance(node[k], list):
-                    node[k] = [walk(v) for v in node[k]]
-
-            # Enforce object strictness
-            if node.get("type") == "object":
-                node["additionalProperties"] = False
-                if isinstance(node.get("properties"), dict):
-                    node["required"] = list(node["properties"].keys())
-                else:
-                    node["properties"] = {}
-                    node["required"] = []
-
-            return node
-
-        if isinstance(node, list):
-            return [walk(v) for v in node]
-
-        return node
-
-    return walk(copy.deepcopy(schema))
+    # Delegate to shared utility for consistency
+    return obatch.sanitize_schema_for_strict(schema)
 
 def _load_prompt_template() -> str:
     tpl_path = os.path.join(_REPO_ROOT, 'prompts', 'claim_processing.md')
@@ -113,7 +76,8 @@ def _build_requests(
     for doc in docs:
         article_id = str(doc.get('_id'))
         
-        doc_format = f"""Title: {doc.get('title', 'Unknown Title')}\nTimestamp: {doc.get('date')}\nTags: {','.join(doc.get('tags', []))}\nSource: {doc.get('link', 'Unknown Source')}\n\nContent: {doc.get('raw_content', 'Unknown Content')}"""
+        content_body = doc.get('clean_markdown') or doc.get('raw_content', 'Unknown Content')
+        doc_format = f"""Title: {doc.get('title', 'Unknown Title')}\nTimestamp: {doc.get('date')}\nTags: {','.join(doc.get('tags', []))}\nSource: {doc.get('link', 'Unknown Source')}\n\nContent (Markdown):\n{content_body}"""
         
         content = template.replace('{{SCHEMA}}', schema_json).replace('{{ARTICLE}}', doc_format)
         requests.append(
@@ -135,117 +99,16 @@ def _build_requests(
 
 
 def _write_jsonl(path: str, lines: Iterable[Dict[str, Any]]) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
-        for line in lines:
-            f.write(json.dumps(line, ensure_ascii=False))
-            f.write('\n')
+    return obatch.write_jsonl(path, lines)
 
 
-def _create_batch(request_lines: List[Dict[str, Any]], endpoint: str) -> Dict[str, Any]:
-    """Create a Batch job.
-
-    Batch API requires uploading a JSONL file of request lines first, then creating
-    the batch with that uploaded file id.
-    """
-    tmp_dir = os.path.join(_HERE, '.tmp')
-    jsonl_path = os.path.join(tmp_dir, f'claim_batch_{int(time.time())}.jsonl')
-    _write_jsonl(jsonl_path, request_lines)
-
-    logger.info(f"Uploading batch input file with {len(request_lines)} lines")
-    input_file = _OPENAI_CLIENT.files.create(
-        file=open(jsonl_path, 'rb'),
-        purpose='batch',
-    )
-
-    logger.info(f"Creating batch for endpoint {endpoint} using input_file_id={input_file.id}")
-    batch = _OPENAI_CLIENT.batches.create(
-        input_file_id=input_file.id,
-        endpoint=endpoint,
-        completion_window='24h',
-        metadata={"job": "claim_process"},
-    )
-    # Return as dict-like for easier downstream handling
-    return batch
+def _create_batch(request_lines: List[Dict[str, Any]], endpoint: str):
+    logger.info(f"Creating batch with {len(request_lines)} lines for endpoint {endpoint}")
+    return obatch.create_batch(_OPENAI_CLIENT, request_lines, endpoint)
 
 
 def _poll_batch(batch_id: str, poll_interval: int = 5, timeout: int = 60 * 30, expected_total: Optional[int] = None):
-    """Poll a batch until completion or timeout.
-
-    Sliding timeout resets whenever progress ratio (completed/total) increases.
-    Also enforces a hard stop at 4 hours from the start of polling.
-    """
-    def _extract_progress(b: Any, default_total: Optional[int]) -> (int, int, Optional[float]):
-        rc = getattr(b, 'request_counts', None) or (b.get('request_counts') if isinstance(b, dict) else None)
-        total = None
-        completed = None
-        if rc is not None:
-            # rc may be object-like or dict-like
-            total = getattr(rc, 'total', None) or (rc.get('total') if isinstance(rc, dict) else None)
-            completed = (
-                getattr(rc, 'completed', None)
-                or (rc.get('completed') if isinstance(rc, dict) else None)
-                or getattr(rc, 'succeeded', None)
-                or (rc.get('succeeded') if isinstance(rc, dict) else None)
-            )
-        if total is None:
-            total = default_total
-        if completed is None:
-            completed = 0
-        ratio = None
-        try:
-            if total and total > 0:
-                ratio = completed / total
-        except Exception:
-            ratio = None
-        return int(completed or 0), int(total or 0), ratio
-
-    start = time.time()
-    last_progress_ts = start
-    hard_stop_ts = start + 60 * 60 * 4  # 4 hours hard stop
-    last_ratio = -1.0
-
-    while True:
-        batch = _OPENAI_CLIENT.batches.retrieve(batch_id)
-        status = getattr(batch, 'status', None) or (batch.get('status') if isinstance(batch, dict) else None)
-
-        completed, total, ratio = _extract_progress(batch, expected_total)
-        if total:
-            ratio_str = f"{ratio*100:.1f}%" if ratio is not None else "n/a"
-            logger.info(f"Batch {batch_id} status: {status} | progress: {completed}/{total} ({ratio_str})")
-        else:
-            logger.info(f"Batch {batch_id} status: {status}")
-
-        # Terminal statuses per Batch docs: validating/failed/in_progress/finalizing/completed/expired/cancelling/cancelled
-        if status in ('completed', 'expired', 'cancelled'):
-            return batch
-        if status in ('failed',):
-            raise RuntimeError(f"Batch {batch_id} failed: {batch}")
-
-        # Reset sliding timeout if progress improved
-        if ratio is not None and ratio > last_ratio:
-            last_ratio = ratio
-            last_progress_ts = time.time()
-
-        now = time.time()
-        if now > hard_stop_ts:
-            # Best-effort cancel to avoid incurring costs if it eventually completes
-            try:
-                _OPENAI_CLIENT.batches.cancel(batch_id)
-                logger.info(f"Issued cancel for batch {batch_id} due to hard stop")
-            except Exception:
-                logger.exception(f"Failed to cancel batch {batch_id} on hard stop")
-            raise TimeoutError(f"Hard stop reached (4h) while waiting for batch {batch_id}")
-        if now - last_progress_ts > timeout:
-            # Best-effort cancel to avoid incurring costs if it eventually completes
-            try:
-                _OPENAI_CLIENT.batches.cancel(batch_id)
-                logger.info(f"Issued cancel for batch {batch_id} due to inactivity timeout")
-            except Exception:
-                logger.exception(f"Failed to cancel batch {batch_id} on inactivity timeout")
-            raise TimeoutError(f"Timed out (no progress) waiting for batch {batch_id}")
-
-        time.sleep(poll_interval)
+    return obatch.poll_batch(_OPENAI_CLIENT, batch_id, poll_interval=poll_interval, timeout=timeout, expected_total=expected_total)
 
 
 def _fallback_process_with_responses(
@@ -268,7 +131,8 @@ def _fallback_process_with_responses(
     for doc in docs:
         try:
             article_id = str(doc.get('_id'))
-            doc_format = f"""Title: {doc.get('title', 'Unknown Title')}\nTimestamp: {doc.get('date')}\nTags: {','.join(doc.get('tags', []))}\nSource: {doc.get('link', 'Unknown Source')}\n\nContent: {doc.get('raw_content', 'Unknown Content')}"""
+            content_body = doc.get('clean_markdown') or doc.get('raw_content', 'Unknown Content')
+            doc_format = f"""Title: {doc.get('title', 'Unknown Title')}\nTimestamp: {doc.get('date')}\nTags: {','.join(doc.get('tags', []))}\nSource: {doc.get('link', 'Unknown Source')}\n\nContent (Markdown):\n{content_body}"""
             content = template.replace('{{SCHEMA}}', schema_json).replace('{{ARTICLE}}', doc_format)
 
             # Use Responses API with structured parsing to ClaimProcessingResult
@@ -352,17 +216,11 @@ def _fallback_process_with_responses(
 
 
 def _read_file_text(file_id: str) -> str:
-    # Official SDK returns a FileContent response with a `.text` property.
-    file_response = _OPENAI_CLIENT.files.content(file_id)
-    return getattr(file_response, 'text', None) or str(file_response)
+    return obatch.read_file_text(_OPENAI_CLIENT, file_id)
 
 
 def _iter_jsonl(text: str) -> Iterable[Dict[str, Any]]:
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        yield json.loads(line)
+    return obatch.iter_jsonl(text)
 
 
 def _pydantic_parse_result(payload: Dict[str, Any]) -> ClaimProcessingResult:
@@ -455,7 +313,7 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
     schema = _sanitize_schema_for_strict(schema)
     schema_json = json.dumps(schema, indent=2)
 
-    model = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
+    model = os.environ.get('OPENAI_MODEL', 'gpt-5-nano')
     endpoint = '/v1/chat/completions'
     request_lines = _build_requests(docs, schema, schema_json, template, model=model)
 
@@ -472,14 +330,19 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
         return
 
     # Poll until completed
-    try:
-        finished = _poll_batch(batch_id, poll_interval=poll_interval, expected_total=len(request_lines))
-    except TimeoutError:
+    def _fallback():
         logger.warning('Batch polling timed out; falling back to Responses API for remaining items')
         _fallback_process_with_responses(docs, template, model, schema, schema_json)
-        return
-    except Exception:
-        logger.exception('Error while polling batch')
+
+    finished = obatch.poll_batch_with_fallback(
+        _OPENAI_CLIENT,
+        batch_id,
+        poll_interval=poll_interval,
+        timeout=60 * 1,
+        expected_total=len(request_lines),
+        on_timeout=_fallback,
+    )
+    if finished is None:
         return
 
     output_file_id = getattr(finished, 'output_file_id', None) or (finished.get('output_file_id') if isinstance(finished, dict) else None)
