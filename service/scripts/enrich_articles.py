@@ -189,7 +189,7 @@ def run(batch: int = 50):
                 "method": "POST",
                 "url": "/v1/chat/completions",
                 "body": {
-                    "model": os.environ.get('OPENAI_MODEL', 'gpt-4o-mini'),
+                    "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
                     "messages": [{"role": "user", "content": content}],
                     "response_format": response_format,
                 },
