@@ -101,12 +101,8 @@ export default async function FeedPage({
                     </Link>
                   </h2>
                   <div className="mt-2 text-sm">
-                    <Link href={`/article/${(it as any)._id?.toString?.()}`} className="text-accent hover:underline">
-                      View details
-                    </Link>
-                    {" · "}
                     <a href={it.link} target="_blank" className="hover:underline">
-                      Original
+                      Original Article
                     </a>
                   </div>
                   {it.tags && it.tags.length > 0 && (

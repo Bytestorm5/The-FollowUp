@@ -40,7 +40,10 @@ def _build_input(article: Dict[str, Any], template: str) -> str:
     link = article.get('link', '')
     tags = ','.join(article.get('tags', []) or [])
     # Prefer fetching live content from the source link
-    fetched = _fetch_url_text(link)
+    if link.startswith('https://www.state.gov'):
+        fetched = article.get('raw_content', '')
+    else:
+        fetched = _fetch_url_text(link)
     if not fetched:
         fetched = article.get('raw_content', '')
     body = f"Title: {title}\nDate: {date}\nTags: {tags}\nSource: {link}\n\nSource Content (fetched):\n{fetched}"
