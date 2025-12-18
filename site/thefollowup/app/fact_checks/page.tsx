@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSilverClaimsCollection, getSilverUpdatesCollection, ObjectId, type SilverClaim, type SilverUpdate } from "@/lib/mongo";
 import { parseISODate, searchClaimIdsByText } from "@/lib/search";
+import Pagination from "@/components/Pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,8 @@ export default async function FactChecksPage({
   const v = String(sp?.v ?? "").toLowerCase(); // "true" | "false" | "complicated" | ""
   const from = parseISODate(sp?.from);
   const to = parseISODate(sp?.to);
+  const page = Math.max(1, parseInt(String(sp?.page ?? "1"), 10) || 1);
+  const pageSize = Math.min(100, Math.max(5, parseInt(String(sp?.pageSize ?? "20"), 10) || 20));
   const claimsColl = await getSilverClaimsCollection();
   const updatesColl = await getSilverUpdatesCollection();
 
@@ -97,6 +100,9 @@ export default async function FactChecksPage({
   });
 
   rowsFiltered.sort((a, b) => (new Date(b.latest.created_at as any).getTime() - new Date(a.latest.created_at as any).getTime()));
+  const total = rowsFiltered.length;
+  const start = (page - 1) * pageSize;
+  const rowsPage = rowsFiltered.slice(start, start + pageSize);
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
@@ -140,7 +146,7 @@ export default async function FactChecksPage({
           <p className="mt-6 text-foreground/70">No fact checks yet.</p>
         ) : (
           <ul className="mt-6 space-y-4">
-            {rowsFiltered.map((r) => (
+            {rowsPage.map((r) => (
               <li key={r.id} className="card border border-[var(--color-border)] p-4">
                 <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wide text-foreground/70">
                   <VerdictIcon verdict={r.latest.verdict} />
@@ -153,6 +159,17 @@ export default async function FactChecksPage({
               </li>
             ))}
           </ul>
+        )}
+
+        {/* Pagination */}
+        {rowsFiltered.length > 0 && (
+          <Pagination
+            basePath="/fact_checks"
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            params={{ q, v, from: from ? from.toISOString().slice(0,10) : "", to: to ? to.toISOString().slice(0,10) : "" }}
+          />
         )}
       </div>
     </div>

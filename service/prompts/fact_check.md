@@ -10,7 +10,7 @@ Principles:
 
 Deliverable schema (ModelResponseOutput):
 - verdict: one of [complete, in_progress, failed]
-- text: concise 2–5 sentence summary citing evidence
+- text: concise 2–5 sentence summary citing evidence, followed by a minimum of 1 sentence explicitly stating the verdict and the reasoning for it.
 - sources: list of URLs (credible sources only)
 - follow_up_date: optional ISO date if a future update/review is appropriate
 

@@ -8,7 +8,7 @@ Task:
 
 Constraints:
 - Do not hallucinate facts.
-- Do not add additional formatting flairs if it is not present in the original article. We should aim for the most simple formatting possible.
+- For clean_markdown, you must preserve the verbatim text exactly. However, formatting should be set up for best readability as rendered markdown.
 - If the raw content is already clean text, format it as markdown sections without changing wording.
 - Keep URLs intact where present.
 

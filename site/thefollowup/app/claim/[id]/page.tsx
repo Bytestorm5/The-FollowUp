@@ -174,7 +174,10 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
         {sourceSummary && (
           <div className="mt-4 rounded-md border border-[var(--color-border)] bg-white/60 p-3 text-sm text-foreground/80">
             <div className="mb-1 text-xs uppercase tracking-wide text-foreground/70">Source summary</div>
-            {sourceSummary}
+            <div>{sourceSummary}</div>
+            <div className="mt-2 text-base italic">
+              <Link href={`/article/${String((claim as any).article_id)}`} className="hover:underline">View original article →</Link>
+            </div>
           </div>
         )}
 
@@ -297,9 +300,6 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
         </section>
 
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link href={`/article/${String((claim as any).article_id)}`} className="rounded-md border px-3 py-2 text-sm hover:bg-black/5">
-            Article
-          </Link>
           <Link href="/countdowns" className="rounded-md border px-3 py-2 text-sm hover:bg-black/5">
             Back to Countdowns
           </Link>

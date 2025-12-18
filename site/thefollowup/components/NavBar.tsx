@@ -32,9 +32,9 @@ export default function NavBar() {
               </Link>
             </div>
           </div>
-          <Link href="#" className="text-sm font-medium text-foreground hover:opacity-80">
-            About
-          </Link>
+          <Link href="/about" className="text-sm font-medium text-foreground hover:opacity-80">
+              About
+            </Link>
         </nav>
       </div>
     </header>
