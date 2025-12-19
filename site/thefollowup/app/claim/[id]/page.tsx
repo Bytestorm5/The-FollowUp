@@ -59,8 +59,11 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   if ((claim as any).completion_condition_date) {
     dueISO = asUTCStart((claim as any).completion_condition_date as any);
   } else {
+    const claimIdStr = String((claim as any)._id);
+    let claimIdObj: any = null; try { claimIdObj = new ObjectId(claimIdStr); } catch {}
+    const claimIdVariants = [claimIdStr].concat(claimIdObj ? [claimIdObj] : []);
     const followups = await (await getSilverFollowupsCollection())
-      .find({ claim_id: { $in: [id, (() => { try { return new ObjectId(id); } catch { return null; } })()].filter(Boolean) as any[] } })
+      .find({ claim_id: { $in: claimIdVariants as any[] } })
       .project({ follow_up_date: 1 })
       .sort({ follow_up_date: 1 })
       .limit(1)
@@ -74,11 +77,11 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   let nextScheduledISO = "";
   const now = new Date();
   const followupsColl = await getSilverFollowupsCollection();
+  const claimIdStr2 = String((claim as any)._id);
+  let claimIdObj2: any = null; try { claimIdObj2 = new ObjectId(claimIdStr2); } catch {}
+  const claimIdVariants2 = [claimIdStr2].concat(claimIdObj2 ? [claimIdObj2] : []);
   const nextFollowup = await followupsColl
-    .find({
-      claim_id: { $in: [id, (() => { try { return new ObjectId(id); } catch { return null; } })()].filter(Boolean) as any[] },
-      follow_up_date: { $gte: now },
-    })
+    .find({ claim_id: { $in: claimIdVariants2 as any[] }, follow_up_date: { $gte: now } })
     .project({ follow_up_date: 1 })
     .sort({ follow_up_date: 1 })
     .limit(1)
@@ -87,17 +90,14 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
 
   // All scheduled followups (past and future, processed or not)
   const allFollowups = await followupsColl
-    .find({
-      claim_id: { $in: [id, (() => { try { return new ObjectId(id); } catch { return null; } })()].filter(Boolean) as any[] },
-    })
+    .find({ claim_id: { $in: claimIdVariants2 as any[] } })
     .project({ follow_up_date: 1, processed_at: 1 })
     .sort({ follow_up_date: 1 })
     .toArray();
 
   // Load generated updates, newest first
   const updatesColl = await getSilverUpdatesCollection();
-  const idVariants = [id];
-  try { idVariants.push(new ObjectId(id) as any); } catch {}
+  const idVariants = [claimIdStr2].concat(claimIdObj2 ? [claimIdObj2] : []);
   const updates = (await updatesColl
     .find({ claim_id: { $in: idVariants as any[] } })
     .sort({ created_at: -1, _id: -1 })
@@ -163,8 +163,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
         {/* Mechanism pill if present */}
         {claim.mechanism && (
           <div className="mt-2">
-            <Link href={`/article/${String((claim as any)._articleSlug || (claim as any).article_id)}`} className="hover:underline">View original article</Link>
-            {claim.mechanism}
+            <span className="rounded-full border px-2 py-0.5 text-xs uppercase tracking-wide text-foreground/70">{claim.mechanism}</span>
           </div>
         )}
 
@@ -178,7 +177,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
             <div className="mb-1 text-xs uppercase tracking-wide text-foreground/70">Source summary</div>
             <div>{sourceSummary}</div>
             <div className="mt-2 text-base italic">
-              <Link href={`/article/${String((claim as any).article_id)}`} className="hover:underline">View original article →</Link>
+              <Link href={`/article/${String((claim as any)._articleSlug || (claim as any).article_id)}`} className="hover:underline">View original article →</Link>
             </div>
           </div>
         )}
@@ -239,7 +238,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                     <span className="timeline-dot" />
                     <div className="text-sm text-foreground/70">Original article · {fmtDateUTC(ev.date as any)}</div>
                     <div className="mt-1">
-                      <Link href={`/article/${String((claim as any).article_id)}`} className="hover:underline">View article</Link>
+                      <Link href={`/article/${String((claim as any)._articleSlug || (claim as any).article_id)}`} className="hover:underline">View article</Link>
                     </div>
                   </li>
                 );

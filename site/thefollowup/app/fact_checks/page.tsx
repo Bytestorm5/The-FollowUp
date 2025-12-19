@@ -42,7 +42,7 @@ export default async function FactChecksPage({
 
   const statements = (await claimsColl
     .find({ type: "statement" })
-    .project({ claim: 1, article_id: 1 })
+    .project({ claim: 1, article_id: 1, slug: 1 })
     .toArray()) as SilverClaim[];
 
   const ids = statements.map((c: any) => {
@@ -68,9 +68,9 @@ export default async function FactChecksPage({
       // extract latest text for search
       const mo: any = (lu as any).model_output;
       const latestText: string | undefined = typeof mo === "string" ? mo : mo?.text;
-      return { id: String(c._id), claim: c.claim, latest: lu, latestText };
+      return { id: String(c._id), slug: c.slug ? String(c.slug) : undefined, claim: c.claim, latest: lu, latestText };
     })
-    .filter(Boolean) as { id: string; claim: string; latest: SilverUpdate; latestText?: string }[];
+    .filter(Boolean) as { id: string; slug?: string; claim: string; latest: SilverUpdate; latestText?: string }[];
 
   // MongoDB Atlas Search (fuzzy) for q against claims and updates
   let idsBySearch: Set<string> | null = null;
@@ -152,7 +152,7 @@ export default async function FactChecksPage({
                   <VerdictIcon verdict={r.latest.verdict} />
                   <span>{verdictLabel(r.latest.verdict)}</span>
                 </div>
-                <Link href={`/claim/${(r as any).slug || r.id}`} className="text-lg font-semibold hover:underline" style={{ fontFamily: "var(--font-serif)" }}>
+                <Link href={`/claim/${r.slug || r.id}`} className="text-lg font-semibold hover:underline" style={{ fontFamily: "var(--font-serif)" }}>
                   {r.claim}
                 </Link>
                 <div className="mt-1 text-xs text-foreground/60">Updated {new Date(r.latest.created_at as any).toLocaleString()}</div>
