@@ -162,10 +162,9 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
 
         {/* Mechanism pill if present */}
         {claim.mechanism && (
-            <div className="mt-2">
-              <Link href={`/article/${String((claim as any)._articleSlug || (claim as any).article_id)}`} className="hover:underline">View original article</Link>
-              {claim.mechanism}
-            </span>
+          <div className="mt-2">
+            <Link href={`/article/${String((claim as any)._articleSlug || (claim as any).article_id)}`} className="hover:underline">View original article</Link>
+            {claim.mechanism}
           </div>
         )}
 
