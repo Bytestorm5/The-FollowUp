@@ -38,7 +38,8 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
     const oid = new ObjectId(id);
     claim = (await claimsColl.findOne({ _id: oid })) as SilverClaim | null;
   } catch {
-    claim = (await claimsColl.findOne({ _id: id as any })) as SilverClaim | null;
+    claim = (await claimsColl.findOne({ slug: id as any })) as SilverClaim | null;
+    if (!claim) claim = (await claimsColl.findOne({ _id: id as any })) as SilverClaim | null;
   }
 
   if (!claim) return notFound();
@@ -49,6 +50,8 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
     const artColl = await getBronzeCollection();
     const art = await artColl.findOne({ _id: (() => { try { return new ObjectId(String((claim as any).article_id)); } catch { return (claim as any).article_id; } })() as any });
     sourceSummary = (art as any)?.summary_paragraph ?? null;
+    // Use article slug if present when linking
+    (claim as any)._articleSlug = (art as any)?.slug;
   } catch {}
 
   // Fallback next update date from followups if no completion date
@@ -159,8 +162,8 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
 
         {/* Mechanism pill if present */}
         {claim.mechanism && (
-          <div className="mt-3">
-            <span className="rounded-full border px-2 py-0.5 text-xs uppercase tracking-wide text-foreground/70">
+            <div className="mt-2">
+              <Link href={`/article/${String((claim as any)._articleSlug || (claim as any).article_id)}`} className="hover:underline">View original article</Link>
               {claim.mechanism}
             </span>
           </div>

@@ -32,6 +32,7 @@ export async function getDb(): Promise<Db> {
 export interface BronzeLink {
   _id?: ObjectId;
   title: string;
+  slug?: string;
   date: Date | string;
   inserted_at?: Date | string;
   link: string;
@@ -50,6 +51,7 @@ export async function getBronzeCollection(): Promise<Collection<BronzeLink>> {
 
 export interface SilverClaim {
   _id?: ObjectId;
+  slug?: string;
   claim: string;
   verbatim_claim: string;
   type: "goal" | "promise" | "statement";

@@ -96,7 +96,7 @@ export default async function FeedPage({
                     )}
                   </div>
                   <h2 className="mt-1 text-xl font-semibold text-primary" style={{ fontFamily: "var(--font-serif)" }}>
-                    <Link href={`/article/${(it as any)._id?.toString?.()}`} className="hover:underline">
+                    <Link href={`/article/${(it as any).slug || (it as any)._id?.toString?.()}`} className="hover:underline">
                       {it.title}
                     </Link>
                   </h2>

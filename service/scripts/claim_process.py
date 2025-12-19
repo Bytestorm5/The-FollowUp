@@ -28,6 +28,7 @@ if _REPO_ROOT not in sys.path:
 
 from models import ClaimProcessingResult, Date_Delta, MongoClaim
 from util import mongo
+from util.slug import generate_unique_slug as _gen_slug
 from util.mongo import normalize_dates as _normalize_dates
 from util import openai_batch as obatch
 
@@ -203,6 +204,10 @@ def _fallback_process_with_responses(
                 payload['article_link'] = article_link
                 payload['article_date'] = resolved_article_date or _get_pipeline_today()
                 payload['date_past'] = date_past
+                try:
+                    payload['slug'] = _gen_slug(claims_coll, payload.get('claim', ''), date=payload.get('article_date'))
+                except Exception:
+                    pass
 
                 try:
                     mongo_claim = MongoClaim(**payload)
@@ -457,6 +462,10 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
                 # MongoClaim requires an `article_date` field; fall back to today if missing
                 payload['article_date'] = resolved_article_date or _get_pipeline_today()
                 payload['date_past'] = date_past
+                try:
+                    payload['slug'] = _gen_slug(claims_coll, payload.get('claim', ''), date=payload.get('article_date'))
+                except Exception:
+                    pass
 
                 try:
                     mongo_claim = MongoClaim(**payload)

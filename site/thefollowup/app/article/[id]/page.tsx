@@ -47,7 +47,8 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
     const oid = new ObjectId(id);
     doc = await coll.findOne({ _id: oid });
   } catch {
-    doc = await coll.findOne({ _id: id as any });
+    // Try by slug, then by raw _id string
+    doc = await coll.findOne({ slug: id as any }) || await coll.findOne({ _id: id as any });
   }
 
   if (!doc) return notFound();
@@ -109,7 +110,7 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
             <ul className="mt-3 list-disc space-y-3 pl-5">
               {claims.map((c) => (
                 <li key={(c as any)._id?.toString?.() ?? c.claim} className="leading-relaxed">
-                  <span className="mr-2 rounded-full border px-2 py-0.5 text-xs uppercase tracking-wide text-foreground/80 inline-flex items-center gap-1">
+                  <span className="mr-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs uppercase tracking-wide text-foreground/80">
                     {typeLabel(c.type)}
                     {/* Status icon inside badge based on latest verdict */}
                     {(() => {
@@ -118,7 +119,7 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
                       return <VerdictIcon verdict={v} />;
                     })()}
                   </span>
-                  <Link href={`/claim/${(c as any)._id?.toString?.()}`} className="font-medium hover:underline">
+                  <Link href={`/claim/${(c as any).slug || (c as any)._id?.toString?.()}`} className="font-medium hover:underline">
                     {c.claim}
                   </Link>
                   {c.completion_condition_date && (

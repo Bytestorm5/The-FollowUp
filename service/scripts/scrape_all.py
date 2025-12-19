@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 try:
 	from util import mongo as _mongo_module
 	_BRONZE_COLLECTION = getattr(_mongo_module, 'bronze_links', None)
+	from util.slug import generate_unique_slug as _gen_slug
 except Exception:
 	_BRONZE_COLLECTION = None
 
@@ -147,6 +148,19 @@ def main(argv=None):
 						doc['date'] = datetime.datetime.combine(doc['date'], datetime.time())
 				except Exception:
 					# leave as-is if conversion fails
+					pass
+
+				# Ensure a unique slug for the article (based on title)
+				try:
+					art_date = None
+					try:
+						if isinstance(doc.get('date'), datetime.datetime):
+							art_date = doc['date'].date()
+					except Exception:
+						art_date = None
+					doc['slug'] = _gen_slug(_BRONZE_COLLECTION, doc.get('title', '') or doc.get('link', ''), date=art_date)
+				except Exception:
+					# If slug generation fails, skip setting it
 					pass
 
 				# Upsert by link

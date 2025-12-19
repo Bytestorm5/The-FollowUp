@@ -28,6 +28,7 @@ class LinkAggregationResult(BaseModel):
 
 class MongoArticle(BaseModel):
     id: Optional[ObjectId] = Field(None, description="MongoDB ID of the article")
+    slug: Optional[str] = Field(None, description="URL-friendly unique slug for the article")
     title: str = Field(..., description="Title of the news article")
     date: datetime.date = Field(..., description="Date of the news article")
     inserted_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow, description="Timestamp of when the article was inserted into the database")
@@ -183,6 +184,7 @@ class ArticleEnrichment(BaseModel):
     
     
 class MongoClaim(BaseModel):
+    slug: Optional[str] = Field(None, description="URL-friendly unique slug for the claim")
     claim: str = Field(..., description="The claim being processed")
     verbatim_claim: str = Field(..., description="The verbatim version of the claim")
     type: Literal["goal", "promise", "statement"] = Field(..., description="Type of the claim. It can be 'goal', 'promise', or 'statement'. Goals are general objectives, promises are specific commitments with a deadline and a measurable outcome, and statements are factual assertions.")

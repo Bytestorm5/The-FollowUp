@@ -152,7 +152,7 @@ export default async function FactChecksPage({
                   <VerdictIcon verdict={r.latest.verdict} />
                   <span>{verdictLabel(r.latest.verdict)}</span>
                 </div>
-                <Link href={`/claim/${r.id}`} className="text-lg font-semibold hover:underline" style={{ fontFamily: "var(--font-serif)" }}>
+                <Link href={`/claim/${(r as any).slug || r.id}`} className="text-lg font-semibold hover:underline" style={{ fontFamily: "var(--font-serif)" }}>
                   {r.claim}
                 </Link>
                 <div className="mt-1 text-xs text-foreground/60">Updated {new Date(r.latest.created_at as any).toLocaleString()}</div>
