@@ -100,7 +100,6 @@ def _build_requests(
                     "messages": [
                         {"role": "user", "content": content},
                     ],
-                    "temperature": 0,
                     "response_format": response_format,
                 },
             }
