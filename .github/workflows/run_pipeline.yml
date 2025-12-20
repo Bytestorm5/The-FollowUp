@@ -3,7 +3,7 @@ name: Run Pipeline
 on:
   workflow_dispatch:
   schedule:
-    - cron: '30 6 * * *' # nightly at 06:30 UTC / 1:30 EST
+    - cron: '20 * * * *' # hourly at :20 UTC to capture top-of-hour events
 
 jobs:
   run-pipeline:

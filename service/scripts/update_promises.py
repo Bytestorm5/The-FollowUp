@@ -482,7 +482,15 @@ def main():
         except Exception:
             logger.exception('Failed to normalize followup filter; using original filter')
 
-        followups_cursor = db.get_collection('silver_followups').find(followup_filter)
+        # Only process today's followups on the last run of the day (EST, fixed UTC-5)
+        try:
+            from util.timezone import now_utc_minus_5 as _now_minus5
+            if _now_minus5().hour < 23:
+                followups_cursor = []
+            else:
+                followups_cursor = db.get_collection('silver_followups').find(followup_filter)
+        except Exception:
+            followups_cursor = db.get_collection('silver_followups').find(followup_filter)
     except Exception:
         followups_cursor = []
 

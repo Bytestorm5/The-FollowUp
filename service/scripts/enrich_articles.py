@@ -19,6 +19,7 @@ from util import mongo
 from models import ArticleEnrichment, MongoArticle
 from util import openai_batch as obatch
 from util.scrape_utils import playwright_get
+from util import locks as _locks
 
 logger = logging.getLogger(__name__)
 
@@ -154,16 +155,25 @@ def run(batch: int = 50):
 
     template = _load_template()
 
-    # Pull newest first to prioritize fresh content
-    cursor = coll.find({
+    # Find candidates and acquire enrichment locks to avoid concurrent processing
+    candidates = coll.find({
         '$or': [
             {'clean_markdown': {'$exists': False}},
             {'summary_paragraph': {'$exists': False}},
             {'key_takeaways': {'$exists': False}},
         ]
-    }).sort('inserted_at', -1).limit(batch)
+    }).sort('inserted_at', 1)
 
-    docs = list(cursor)
+    docs = []
+    owner = os.environ.get('HOSTNAME') or f"pid-{os.getpid()}"
+    for art in candidates:
+        if len(docs) >= batch:
+            break
+        try:
+            if _locks.acquire_lock(coll, art.get('_id'), 'enrich_lock', owner, ttl_seconds=3600):
+                docs.append(art)
+        except Exception:
+            logger.exception('Failed to acquire enrich lock for %s', art.get('_id'))
     if not docs:
         logger.info('No articles require enrichment')
         return
@@ -256,7 +266,7 @@ def run(batch: int = 50):
                     'clean_markdown': enr.clean_markdown,
                     'summary_paragraph': enr.summary_paragraph,
                     'key_takeaways': list(enr.key_takeaways or []),
-                }}
+                }, '$unset': {'enrich_lock': ""}}
             )
             updated += 1
         except Exception:

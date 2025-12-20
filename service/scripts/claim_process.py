@@ -238,6 +238,17 @@ def _fallback_process_with_responses(
                     processed_article_ids.add(article_id)
                 except Exception:
                     logger.exception('Failed to set claim_processed for article %s (responses fallback)', article_id)
+            # Release lock
+            try:
+                from bson import ObjectId
+                oid = ObjectId(article_id)
+            except Exception:
+                oid = article_id
+            try:
+                from util import locks as _locks
+                _locks.release_lock(bronze, oid, 'claimproc_lock')
+            except Exception:
+                pass
         except Exception:
             logger.exception('Unexpected error in responses fallback for one document')
 
@@ -321,9 +332,19 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
 
     claims_coll = mongo.silver_claims
 
-    # Find documents that are not yet processed (missing or False)
-    cursor = bronze.find({'claim_processed': {'$ne': True}}).limit(batch_size)
-    docs = list(cursor)
+    # Find and lock documents that are not yet processed (missing or False)
+    from util import locks as _locks
+    owner = os.environ.get('HOSTNAME') or f"pid-{os.getpid()}"
+    cursor = bronze.find({'claim_processed': {'$ne': True}}).sort('inserted_at', 1)
+    docs = []
+    for d in cursor:
+        if len(docs) >= batch_size:
+            break
+        try:
+            if _locks.acquire_lock(bronze, d.get('_id'), 'claimproc_lock', owner, ttl_seconds=3600):
+                docs.append(d)
+        except Exception:
+            logger.exception('Failed to acquire claimproc_lock for %s', d.get('_id'))
     if not docs:
         logger.info('No unprocessed documents found')
         return
@@ -494,6 +515,17 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
                     processed_article_ids.add(article_id)
                 except Exception:
                     logger.exception(f'Failed to set claim_processed for article {article_id}')
+            # Release lock
+            try:
+                from bson import ObjectId
+                oid = ObjectId(article_id)
+            except Exception:
+                oid = article_id
+            try:
+                from util import locks as _locks
+                _locks.release_lock(bronze, oid, 'claimproc_lock')
+            except Exception:
+                pass
         except Exception:
             logger.exception('Error processing an output line')
 
