@@ -668,6 +668,22 @@ def main():
             follow_date_raw = getattr(parsed_obj, 'follow_up_date', None) if hasattr(parsed_obj, 'follow_up_date') else (parsed_obj.get('follow_up_date') if isinstance(parsed_obj, dict) else None)
         follow_date = _coerce_date(follow_date_raw)
 
+        # Normalize parsed_obj for storage to avoid Pydantic model instances in model_output
+        def _norm_model_output(po):
+            try:
+                if po is None:
+                    return None
+                if hasattr(po, 'model_dump'):
+                    return po.model_dump()
+                if isinstance(po, dict):
+                    return po
+                if isinstance(po, str):
+                    return po
+                # best-effort stringify
+                return str(po)
+            except Exception:
+                return None
+
         if is_followup and followup_doc is not None:
             doc = {
                 'claim_id': followup_doc.get('claim_id'),
@@ -675,7 +691,7 @@ def main():
                 'article_id': followup_doc.get('article_id', ''),
                 'article_link': followup_doc.get('article_link', ''),
                 'article_date': followup_doc.get('article_date', None),
-                'model_output': parsed_obj if parsed_obj is not None else model_text,
+                'model_output': _norm_model_output(parsed_obj) if parsed_obj is not None else model_text,
                 'verdict': verdict,
                 'created_at': datetime.datetime.utcnow(),
             }
@@ -686,7 +702,7 @@ def main():
                 'article_id': getattr(claim, 'article_id', ''),
                 'article_link': getattr(claim, 'article_link', ''),
                 'article_date': getattr(claim, 'article_date', None),
-                'model_output': parsed_obj if parsed_obj is not None else model_text,
+                'model_output': _norm_model_output(parsed_obj) if parsed_obj is not None else model_text,
                 'verdict': verdict,
                 'created_at': datetime.datetime.utcnow(),
             }
@@ -699,7 +715,7 @@ def main():
                     'follow_up_date': follow_date,
                     'article_id': getattr(claim, 'article_id', ''),
                     'article_link': getattr(claim, 'article_link', ''),
-                    'model_output': parsed_obj if parsed_obj is not None else model_text,
+                    'model_output': _norm_model_output(parsed_obj) if parsed_obj is not None else model_text,
                     'created_at': datetime.datetime.utcnow(),
                 }
                 try:

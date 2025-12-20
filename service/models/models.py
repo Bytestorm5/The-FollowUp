@@ -258,7 +258,7 @@ class SilverUpdate(BaseModel):
     article_id: Union[ObjectId, str] = Field(..., description="The DB id of the article")
     article_link: str = Field(..., description="Link to the article")
     article_date: Optional[datetime.date] = Field(None, description="Date of the article")
-    model_output: Union[ModelResponseOutput, str] = Field(..., description="Structured model output or raw text output from the model")
+    model_output: Union[ModelResponseOutput, FactCheckResponseOutput, dict, str] = Field(..., description="Structured model output or raw text output from the model")
     verdict: str = Field(..., description="Verdict about claim status (supports legacy and detailed categories)")
     created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
 
@@ -272,7 +272,7 @@ class SilverFollowup(BaseModel):
     follow_up_date: datetime.date = Field(..., description="Date to follow up on this claim/topic")
     article_id: Union[ObjectId, str] = Field(..., description="The DB id of the article")
     article_link: str = Field(..., description="Link to the article")
-    model_output: Union[ModelResponseOutput, str] = Field(..., description="Structured model output or raw text output from the model")
+    model_output: Union[ModelResponseOutput, FactCheckResponseOutput, dict, str] = Field(..., description="Structured model output or raw text output from the model")
     created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
     # When processed by the followup pipeline, these fields will be populated
     processed_at: Optional[datetime.datetime] = Field(None, description="When the followup was processed")
