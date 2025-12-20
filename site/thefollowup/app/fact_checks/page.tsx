@@ -3,6 +3,7 @@ import { getSilverClaimsCollection, getSilverUpdatesCollection, ObjectId, type S
 import { parseISODate, searchClaimIdsByText } from "@/lib/search";
 import { mapVerdictDisplay } from "@/lib/verdict";
 import Pagination from "@/components/Pagination";
+import AdsenseAd from "@/components/AdSenseAd";
 
 export const dynamic = "force-dynamic";
 
@@ -174,6 +175,10 @@ export default async function FactChecksPage({
             params={{ q, v, from: from ? from.toISOString().slice(0,10) : "", to: to ? to.toISOString().slice(0,10) : "" }}
           />
         )}
+        {/* Footer ad slot */}
+        <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
+          <AdsenseAd adSlot="4665141847" />
+        </div>
       </div>
     </div>
   );

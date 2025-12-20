@@ -3,6 +3,7 @@ import { getSilverClaimsCollection, getSilverFollowupsCollection, getSilverUpdat
 import Countdown from "@/components/Countdown";
 import { parseISODate, searchClaimIdsByText } from "@/lib/search";
 import AdsenseAd from "@/components/AdSenseAd";
+import Pagination from "@/components/Pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,8 @@ export default async function CountdownsPage({
   const q = String(sp?.q ?? "").trim();
   const from = parseISODate(sp?.from);
   const to = parseISODate(sp?.to);
+  const page = Math.max(1, parseInt(String(sp?.page ?? "1"), 10) || 1);
+  const pageSize = Math.min(100, Math.max(5, parseInt(String(sp?.pageSize ?? "20"), 10) || 20));
   const claimsColl = await getSilverClaimsCollection();
   const followupsColl = await getSilverFollowupsCollection();
   const updatesColl = await getSilverUpdatesCollection();
@@ -124,6 +127,10 @@ export default async function CountdownsPage({
     return true;
   });
 
+  const total = rowsFiltered.length;
+  const start = (page - 1) * pageSize;
+  const rowsPage = rowsFiltered.slice(start, start + pageSize);
+
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-4 py-8">
@@ -157,7 +164,7 @@ export default async function CountdownsPage({
           <p className="mt-6 text-foreground/70">No upcoming deadlines yet.</p>
         ) : (
           <ul className="mt-6 space-y-4">
-            {rowsFiltered.map((r) => (
+            {rowsPage.map((r) => (
               <li key={r.id} className="card border border-[var(--color-border)] p-4">
                 <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wide text-foreground/70">
                   <span>{r.type}</span>
@@ -187,6 +194,15 @@ export default async function CountdownsPage({
               </li>
             ))}
           </ul>
+        )}
+        {rowsFiltered.length > 0 && (
+          <Pagination
+            basePath="/countdowns"
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            params={{ q, from: from ? from.toISOString().slice(0,10) : "", to: to ? to.toISOString().slice(0,10) : "" }}
+          />
         )}
         {/* Footer ad slot */}
         <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
