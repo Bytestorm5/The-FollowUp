@@ -23,7 +23,7 @@ if _REPO_ROOT not in sys.path:
 	sys.path.insert(0, _REPO_ROOT)
 
 from util import mongo
-from models import MongoClaim, Date_Delta, SilverUpdate, MongoArticle, ModelResponseOutput, SilverFollowup
+from models import MongoClaim, Date_Delta, SilverUpdate, MongoArticle, ModelResponseOutput, SilverFollowup, FactCheckResponseOutput
 
 try:
     from pydantic_core._pydantic_core import ValidationError as PydanticCoreValidationError
@@ -570,32 +570,59 @@ def main():
         max_validation_retries = 3
         for attempt in range(1, max_validation_retries + 1):
             try:
+                # Choose schema based on custom id
+                use_factcheck = False
+                try:
+                    use_factcheck = str(custom_id).startswith("statement:")
+                except Exception:
+                    use_factcheck = False
+
                 resp = _OPENAI_CLIENT.responses.parse(
                     model=model,
                     input=input_arg,
-                    text_format=ModelResponseOutput,
+                    text_format=FactCheckResponseOutput if use_factcheck else ModelResponseOutput,
                     tools=body.get('tools'),
                     tool_choice=body.get('tool_choice'),
                     include=body.get('include'),
                 )
 
                 parsed_obj = getattr(resp, 'output_parsed', None) or (resp.get('output_parsed') if isinstance(resp, dict) else None)
-                if parsed_obj is not None and not isinstance(parsed_obj, ModelResponseOutput):
-                    try:
-                        if hasattr(ModelResponseOutput, 'model_validate'):
-                            parsed_obj = ModelResponseOutput.model_validate(parsed_obj)  # type: ignore[attr-defined]
-                        else:
-                            parsed_obj = ModelResponseOutput.parse_obj(parsed_obj)  # type: ignore[attr-defined]
-                    except Exception as e:
-                        if PydanticCoreValidationError is not None and isinstance(e, PydanticCoreValidationError):
-                            logger.warning(f'ValidationError validating parsed response (attempt {attempt}/{max_validation_retries}) for custom_id={custom_id}; retrying')
+                if parsed_obj is not None:
+                    # Coerce parsed object to the expected Pydantic model if needed
+                    if use_factcheck and not isinstance(parsed_obj, FactCheckResponseOutput):
+                        try:
+                            if hasattr(FactCheckResponseOutput, 'model_validate'):
+                                parsed_obj = FactCheckResponseOutput.model_validate(parsed_obj)  # type: ignore[attr-defined]
+                            else:
+                                parsed_obj = FactCheckResponseOutput.parse_obj(parsed_obj)  # type: ignore[attr-defined]
+                        except Exception as e:
+                            if PydanticCoreValidationError is not None and isinstance(e, PydanticCoreValidationError):
+                                logger.warning(f'ValidationError validating fact-check parsed response (attempt {attempt}/{max_validation_retries}) for custom_id={custom_id}; retrying')
+                                parsed_obj = None
+                                time.sleep(1)
+                                continue
                             parsed_obj = None
-                            time.sleep(1)
-                            continue
-                        parsed_obj = None
+                    if (not use_factcheck) and not isinstance(parsed_obj, ModelResponseOutput):
+                        try:
+                            if hasattr(ModelResponseOutput, 'model_validate'):
+                                parsed_obj = ModelResponseOutput.model_validate(parsed_obj)  # type: ignore[attr-defined]
+                            else:
+                                parsed_obj = ModelResponseOutput.parse_obj(parsed_obj)  # type: ignore[attr-defined]
+                        except Exception as e:
+                            if PydanticCoreValidationError is not None and isinstance(e, PydanticCoreValidationError):
+                                logger.warning(f'ValidationError validating parsed response (attempt {attempt}/{max_validation_retries}) for custom_id={custom_id}; retrying')
+                                parsed_obj = None
+                                time.sleep(1)
+                                continue
+                            parsed_obj = None
 
                 if parsed_obj is not None:
-                    verdict = getattr(parsed_obj, 'verdict', verdict)
+                    # For fact checks store detailed verdict directly; for others keep legacy values
+                    if use_factcheck:
+                        fc_verdict = getattr(parsed_obj, 'verdict', '')
+                        verdict = str(fc_verdict) or verdict
+                    else:
+                        verdict = getattr(parsed_obj, 'verdict', verdict)
                     model_text = getattr(parsed_obj, 'text', '') or model_text
                 break
             except Exception:

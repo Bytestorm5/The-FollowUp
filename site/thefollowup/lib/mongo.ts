@@ -115,7 +115,7 @@ export interface SilverUpdate {
   article_link: string;
   article_date?: Date | string | null;
   model_output: ModelResponseOutput | string;
-  verdict: "complete" | "in_progress" | "failed";
+  verdict: string; // supports legacy and detailed categories
   created_at: Date | string;
 }
 

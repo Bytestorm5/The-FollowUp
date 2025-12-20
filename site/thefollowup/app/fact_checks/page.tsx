@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSilverClaimsCollection, getSilverUpdatesCollection, ObjectId, type SilverClaim, type SilverUpdate } from "@/lib/mongo";
 import { parseISODate, searchClaimIdsByText } from "@/lib/search";
+import { mapVerdictDisplay } from "@/lib/verdict";
 import Pagination from "@/components/Pagination";
 
 export const dynamic = "force-dynamic";
@@ -148,10 +149,12 @@ export default async function FactChecksPage({
           <ul className="mt-6 space-y-4">
             {rowsPage.map((r) => (
               <li key={r.id} className="card border border-[var(--color-border)] p-4">
-                <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wide text-foreground/70">
-                  <VerdictIcon verdict={r.latest.verdict} />
-                  <span>{verdictLabel(r.latest.verdict)}</span>
-                </div>
+                {(() => { const d = mapVerdictDisplay(r.latest.verdict); return (
+                  <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wide" style={{ color: d.color }}>
+                    {d.icon}
+                    <span>{d.label}</span>
+                  </div>
+                );})()}
                 <Link href={`/claim/${r.slug || r.id}`} className="text-lg font-semibold hover:underline" style={{ fontFamily: "var(--font-serif)" }}>
                   {r.claim}
                 </Link>

@@ -229,6 +229,27 @@ class ModelResponseOutput(BaseModel):
         arbitrary_types_allowed = True
 
 
+class FactCheckResponseOutput(BaseModel):
+        """Structured output for fact checks.
+
+        verdict categories:
+            - True
+            - False
+            - Tech Error
+            - Close
+            - Misleading
+            - Unverifiable
+            - Unclear
+        """
+        verdict: Literal["True", "False", "Tech Error", "Close", "Misleading", "Unverifiable", "Unclear"] = Field(..., description="Fact check verdict")
+        text: Optional[str] = Field(None, description="Concise explanation with evidence")
+        sources: Optional[List[str]] = Field(None, description="Source URLs used in the fact check")
+        follow_up_date: Optional[datetime.date] = Field(None, description="Optional follow-up date for developing items")
+
+        class Config:
+                arbitrary_types_allowed = True
+
+
 class SilverUpdate(BaseModel):
     claim_id: Union[ObjectId, str] = Field(..., description="The DB id of the claim")
     claim_text: str = Field(..., description="The text of the claim")
@@ -236,7 +257,7 @@ class SilverUpdate(BaseModel):
     article_link: str = Field(..., description="Link to the article")
     article_date: Optional[datetime.date] = Field(None, description="Date of the article")
     model_output: Union[ModelResponseOutput, str] = Field(..., description="Structured model output or raw text output from the model")
-    verdict: Literal["complete", "in_progress", "failed"] = Field(..., description="Verdict about claim status")
+    verdict: str = Field(..., description="Verdict about claim status (supports legacy and detailed categories)")
     created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
 
     class Config:
