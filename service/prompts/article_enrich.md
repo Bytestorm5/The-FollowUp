@@ -14,7 +14,8 @@ Task:
 
 Constraints:
 - Do not hallucinate facts.
-- For clean_markdown, you must preserve the verbatim text exactly. However, formatting should be set up for best readability as rendered markdown.
+- For clean_markdown, you must preserve the verbatim text exactly. 
+- clean_markdown should format the text nicely for readability. You can take some liberties with formatting as long as the text is preserved.
 - If the raw content is already clean text, format it as markdown sections without changing wording.
 - Keep URLs intact where present.
 

@@ -4,6 +4,7 @@ import Countdown from "@/components/Countdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsCollection, getSilverUpdatesCollection, ObjectId, type SilverClaim, type SilverFollowup, type SilverUpdate } from "@/lib/mongo";
+import AdsenseAd from "@/components/AdSenseAd";
 
 export const dynamic = "force-dynamic";
 
@@ -208,6 +209,11 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
             })()}
           </div>
         )}
+
+        {/* Mid-page ad slot */}
+        <div className="mt-4 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
+          <AdsenseAd adSlot="1318398556" format="fluid" layout="in-article" style={{ display: "block", textAlign: "center" }} />
+        </div>
 
         {dueISO && (
           <div className="mt-4 text-sm text-accent">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getBronzeCollection, type BronzeLink } from "@/lib/mongo";
 import Pagination from "@/components/Pagination";
+import AdsenseAd from "@/components/AdSenseAd";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +128,10 @@ export default async function FeedPage({
         {!mongoError && (
           <Pagination basePath="/feed" page={page} pageSize={pageSize} total={total} />
         )}
+        {/* Footer ad slot */}
+        <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
+          <AdsenseAd adSlot="4665141847" />
+        </div>
       </div>
     </div>
   );

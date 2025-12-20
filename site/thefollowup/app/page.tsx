@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Countdown from "@/components/Countdown";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsCollection, type BronzeLink, type SilverClaim, type SilverFollowup, ObjectId } from "@/lib/mongo";
+import AdsenseAd from "@/components/AdSenseAd";
 
 function pickHeroAndMediums(items: BronzeLink[], maxMediums = 4) {
   // Sort by priority (1 highest), then date desc, then inserted_at desc
@@ -92,18 +93,23 @@ export default async function Home() {
                 {hero.summary_paragraph && (
                   <p className="mt-3 text-foreground/80 text-base">{hero.summary_paragraph}</p>
                 )}
-                {/* Front-page ad below hero */}
-                <div className="mt-4 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
-                  Front-page Ad Slot (Hero)
-                </div>
               </article>
             )}
+            {/* Front-page ad below hero */}
+            <div className="mt-4 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
+              <AdsenseAd adSlot="8719936923"></AdsenseAd>
+            </div>
 
             {/* Medium articles grid */}
             {mediums && mediums.length > 0 && (
               <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {mediums.map((m) => (
-                  <article key={(m as any)._id?.toString?.() || m.link} className="card border border-[var(--color-border)] p-3">
+                {mediums.map((m, i) => (
+                  <article
+                    key={(m as any)._id?.toString?.() || m.link}
+                    className={`card border border-[var(--color-border)] p-3 ${
+                      i >= 4 ? 'hidden lg:block' : i >= 2 ? 'hidden md:block sm:block' : ''
+                    }`}
+                  >
                     <div className="dateline mb-1 text-xs text-foreground/70">{new Date(m.date as any).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" })}</div>
                     <h3 className="text-lg font-semibold text-primary" style={{ fontFamily: "var(--font-serif)" }}>
                       <Link href={`/article/${(m as any).slug || (m as any)._id?.toString?.()}`} className="hover:underline">
@@ -117,6 +123,10 @@ export default async function Home() {
                 ))}
               </div>
             )}
+            {/* Footer ad slot */}
+            <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
+              <AdsenseAd adSlot="4665141847" />
+            </div>
           </div>
 
           {/* Sidebar: compact countdowns + ad slot */}
@@ -140,7 +150,7 @@ export default async function Home() {
             </div>
             {/* Sidebar ad slot */}
             <div className="rounded-md border border-dashed border-[var(--color-border)] p-6 text-center text-xs text-foreground/60">
-              Front-page Sidebar Ad
+              <AdsenseAd adSlot="6251161032"></AdsenseAd>
             </div>
           </aside>
         </div>

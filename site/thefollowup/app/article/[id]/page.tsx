@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { mapVerdictDisplay } from "@/lib/verdict";
+import AdsenseAd from "@/components/AdSenseAd";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverUpdatesCollection, ObjectId, type BronzeLink, type SilverClaim, type SilverUpdate } from "@/lib/mongo";
 
 export const dynamic = "force-dynamic";
@@ -95,8 +96,21 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
           {doc.title}
         </h1>
         <hr className="mt-4" />
-
         
+        {/* Original link between takeaways and article text */}
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link
+            href={doc.link}
+            target="_blank"
+            className="rounded-md border px-3 py-2 text-sm hover:bg-black/5"
+          >
+            Read original article
+          </Link>
+          <Link href="/feed" className="rounded-md border px-3 py-2 text-sm hover:bg-black/5">
+            Back to Feed
+          </Link>
+        </div>
+
         {claims.length !== 0 ? (
           <section className="mt-6">
             <ul className="mt-3 list-disc space-y-3 pl-5">
@@ -141,20 +155,11 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
             </ul>
           </section>
         )}
-
-        {/* Original link between takeaways and article text */}
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link
-            href={doc.link}
-            target="_blank"
-            className="rounded-md border px-3 py-2 text-sm hover:bg-black/5"
-          >
-            Read original article
-          </Link>
-          <Link href="/feed" className="rounded-md border px-3 py-2 text-sm hover:bg-black/5">
-            Back to Feed
-          </Link>
+        <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
+          <AdsenseAd adSlot="5978223516" format="fluid" layout="in-article" style={{ display: "block", textAlign: "center" }}  />
         </div>
+
+        
 
         {/* Cleaned article text (Markdown) */}
         {doc.clean_markdown && (
@@ -162,6 +167,11 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.clean_markdown}</ReactMarkdown>
           </section>
         )}
+
+        {/* Bottom ad slot */}
+        <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
+          <AdsenseAd adSlot="4665141847" />
+        </div>
       </div>
     </div>
   );

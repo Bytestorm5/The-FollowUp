@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSilverClaimsCollection, getSilverFollowupsCollection, getSilverUpdatesCollection, type SilverClaim, type SilverFollowup, type SilverUpdate, ObjectId } from "@/lib/mongo";
 import Countdown from "@/components/Countdown";
 import { parseISODate, searchClaimIdsByText } from "@/lib/search";
+import AdsenseAd from "@/components/AdSenseAd";
 
 export const dynamic = "force-dynamic";
 
@@ -187,6 +188,10 @@ export default async function CountdownsPage({
             ))}
           </ul>
         )}
+        {/* Footer ad slot */}
+        <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
+          <AdsenseAd adSlot="4665141847" />
+        </div>
       </div>
     </div>
   );
