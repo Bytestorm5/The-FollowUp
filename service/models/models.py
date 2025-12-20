@@ -41,6 +41,7 @@ class MongoArticle(BaseModel):
     clean_markdown: Optional[str] = Field(None, description="Verbatim clean text of the article, formatted as Markdown")
     summary_paragraph: Optional[str] = Field(None, description="One-paragraph summary of the article")
     key_takeaways: Optional[List[str]] = Field(None, description="Bullet point key takeaways from the article")
+    priority: Optional[int] = Field(None, description="Article priority score: 1 (Active Emergency) .. 5 (Operational Updates)")
     
     def __init__(self, **kwargs):
         if "_id" in kwargs:
@@ -181,6 +182,7 @@ class ArticleEnrichment(BaseModel):
     clean_markdown: str = Field(..., description="Verbatim clean text formatted as Markdown")
     summary_paragraph: str = Field(..., description="A concise one-paragraph summary")
     key_takeaways: List[str] = Field(..., description="Bullet point key takeaways")
+    priority: Literal[5, 4, 3, 2, 1] = Field(..., description="Priority 1..5 where 1=Active Emergency, 2=Breaking News, 3=Important News, 4=Niche News, 5=Operational Updates")
     
     
 class MongoClaim(BaseModel):

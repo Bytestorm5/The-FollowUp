@@ -120,6 +120,7 @@ def _fallback_enrich(docs: list[Dict[str, Any]], template: str) -> None:
                     'clean_markdown': enr.clean_markdown,
                     'summary_paragraph': enr.summary_paragraph,
                     'key_takeaways': list(enr.key_takeaways or []),
+                    'priority': int(getattr(enr, 'priority', 5)),
                 }
             }
             mongo.bronze_links.update_one({'_id': art.get('_id')}, update)
@@ -266,6 +267,7 @@ def run(batch: int = 50):
                     'clean_markdown': enr.clean_markdown,
                     'summary_paragraph': enr.summary_paragraph,
                     'key_takeaways': list(enr.key_takeaways or []),
+                    'priority': int(getattr(enr, 'priority', 5)),
                 }, '$unset': {'enrich_lock': ""}}
             )
             updated += 1

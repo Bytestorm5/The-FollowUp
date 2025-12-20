@@ -36,9 +36,11 @@ export default function Countdown({ targetISO }: { targetISO: string }) {
   if (years) parts.push(`${pad(years)} year${years !== 1 ? "s" : ""}`);
   if (months) parts.push(`${pad(months)} month${months !== 1 ? "s" : ""}`);
   if (days) parts.push(`${pad(days)} day${days !== 1 ? "s" : ""}`);
-  if (hours || parts.length) parts.push(`${pad(hours)} hour${hours !== 1 ? "s" : ""}`);
-  if (minutes || parts.length) parts.push(`${pad(minutes)} minute${minutes !== 1 ? "s" : ""}`);
-  parts.push(`${pad(seconds)} second${seconds !== 1 ? "s" : ""}`);
+  else {
+    if (hours || parts.length) parts.push(`${pad(hours)} hour${hours !== 1 ? "s" : ""}`);
+    if (minutes || parts.length) parts.push(`${pad(minutes)} minute${minutes !== 1 ? "s" : ""}`);
+    parts.push(`${pad(seconds)} second${seconds !== 1 ? "s" : ""}`);
+  }
 
   return <span>{parts.join(", ")}</span>;
 }

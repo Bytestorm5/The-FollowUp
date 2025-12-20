@@ -42,6 +42,7 @@ export interface BronzeLink {
   clean_markdown?: string | null;
   summary_paragraph?: string | null;
   key_takeaways?: string[] | null;
+  priority?: number | null;
 }
 
 export async function getBronzeCollection(): Promise<Collection<BronzeLink>> {

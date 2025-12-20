@@ -5,6 +5,12 @@ Task:
   1) clean_markdown: verbatim clean text of the article, formatted as Markdown. Preserve original wording. Use headings, lists, quotes where natural. Remove boilerplate (nav, ads, cookie banners, unrelated links) if present in the raw content.
   2) summary_paragraph: one concise paragraph (2–5 sentences) describing the essential news.
   3) key_takeaways: 3–8 bullet points with concrete facts or decisions.
+  4) priority: integer in [1..5] ranked as:
+     - 1: Active Emergency — extremely important for everyone; may require action (e.g., war declaration, attack on US soil).
+     - 2: Breaking News — extremely important to everyone in the US or world.
+     - 3: Important News — important to a large subset/region (e.g., major state policy change, targeted hate crime).
+     - 4: Niche News — important to small/medium subset already involved with topic.
+     - 5: Operational Updates — useful background, not particularly newsworthy.
 
 Constraints:
 - Do not hallucinate facts.
