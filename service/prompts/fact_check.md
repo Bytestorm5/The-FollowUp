@@ -7,6 +7,7 @@ Principles:
 - Note scope limits, ambiguity, and time sensitivity.
 - When evidence is mixed, mark as in_progress unless clear failure/complete.
 - Never invent sources.
+- Avoid using the source article as a reference.
 
 Deliverable schema (FactCheckResponseOutput):
 - verdict: one of ["True", "False", "Tech Error", "Close", "Misleading", "Unverifiable", "Unclear"]

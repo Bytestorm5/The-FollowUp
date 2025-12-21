@@ -39,6 +39,18 @@ formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
+def _is_terminal_verdict(v: Optional[str]) -> bool:
+    if not v:
+        return False
+    s = str(v).strip().lower()
+    # New categories
+    if s in ("true", "false"):
+        return True
+    # Legacy categories
+    if s in ("complete", "failed"):
+        return True
+    return False
+
 def get_claim_groups() -> Tuple[List[Tuple[Any, MongoClaim]], List[Tuple[Any, MongoClaim]], List[Tuple[Any, MongoClaim]]]:
     """Return (promises, goals_fu, statements_fu) groups.
 
@@ -351,10 +363,26 @@ def main():
     request_lines.extend(goals_lines)
     mapping.update(goals_map)
 
-    # Statements: fact-check when follow_up_worthy
+    # Statements: do not revisit unless a follow-up date was given (handled by scheduled followups)
+    # Therefore, only include statements that have never been fact-checked (no latest update)
+    updates_coll = db.get_collection('silver_updates')
+    filtered_statements: List[Tuple[Any, MongoClaim]] = []
+    for raw, claim in statements_fu:
+        try:
+            latest = updates_coll.find({ 'claim_id': raw.get('_id') }, { 'projection': { 'verdict': 1, 'model_output': 1, 'created_at': 1 } })\
+                                .sort([('created_at', -1), ('_id', -1)]).limit(1)
+            latest_list = list(latest)
+            if latest_list:
+                # Already fact-checked at least once; rely on scheduled followups instead of revisiting now
+                continue
+            filtered_statements.append((raw, claim))
+        except Exception:
+            # If anything fails, keep it in to avoid missing checks
+            filtered_statements.append((raw, claim))
+
     stmt_lines = []
     stmt_map = {}
-    for idx, (raw, claim) in enumerate(statements_fu):
+    for idx, (raw, claim) in enumerate(filtered_statements):
         claim_id = raw.get('_id')
         custom_id = f"statement:{claim_id}:{idx}"
         article_date = getattr(claim, 'article_date', None)
@@ -425,18 +453,14 @@ def main():
             if nxt is None:
                 continue
 
-            # Skip if there's already an unprocessed followup in the future (or today)
+            # Skip if there's already a followup with the same date (processed or not)
             try:
-                followup_filter = {
-                    'claim_id': raw.get('_id'),
-                    'processed_at': {'$exists': False},
-                    'follow_up_date': {'$gte': pipeline_today},
-                }
+                followup_filter = { 'claim_id': raw.get('_id'), 'follow_up_date': nxt }
                 try:
                     followup_filter = mongo.normalize_dates(followup_filter)
                 except Exception:
-                    logger.exception('normalize_dates failed for proactive followup filter; using raw filter')
-                existing = followups_coll.count_documents(followup_filter)
+                    logger.exception('normalize_dates failed for proactive followup equality check; using raw filter')
+                existing = followups_coll.count_documents(followup_filter, limit=1)
             except Exception:
                 logger.exception('Failed checking existing followups for claim %s', raw.get('_id'))
                 existing = 0
@@ -462,8 +486,14 @@ def main():
                     final_follow = mongo.normalize_dates(final_follow)
                 except Exception:
                     logger.exception('Failed to normalize dates for proactive silver_followup; inserting raw doc')
-                followups_coll.insert_one(final_follow)
-                proactively_scheduled += 1
+                # Final dedup check, then insert
+                try:
+                    if followups_coll.count_documents({ 'claim_id': final_follow.get('claim_id'), 'follow_up_date': final_follow.get('follow_up_date') }, limit=1) == 0:
+                        followups_coll.insert_one(final_follow)
+                        proactively_scheduled += 1
+                except Exception:
+                    followups_coll.insert_one(final_follow)
+                    proactively_scheduled += 1
             except Exception:
                 logger.exception('Failed inserting proactive followup for claim %s', raw.get('_id'))
 
@@ -734,8 +764,11 @@ def main():
                     except Exception:
                         logger.exception('Failed to normalize dates for silver_followup; proceeding with original doc')
                     try:
-                        db.get_collection('silver_followups').insert_one(final_follow)
-                        logger.info(f"Inserted follow-up for claim {raw.get('_id')} on {follow_date}")
+                        fcoll = db.get_collection('silver_followups')
+                        # Deduplicate by (claim_id, follow_up_date) regardless of processed state
+                        if fcoll.count_documents({ 'claim_id': final_follow.get('claim_id'), 'follow_up_date': final_follow.get('follow_up_date') }, limit=1) == 0:
+                            fcoll.insert_one(final_follow)
+                            logger.info(f"Inserted follow-up for claim {raw.get('_id')} on {follow_date}")
                     except Exception:
                         logger.exception('Failed to insert into silver_followups')
             except Exception:
