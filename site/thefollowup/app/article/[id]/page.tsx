@@ -92,6 +92,15 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
     <div className="min-h-screen w-full bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-4 py-8">
         <div className="dateline mb-1">{fmtDateUTC(doc.date as any)}{domain ? ` · ${domain}` : ""}</div>
+        {(() => {
+          const p: any = (doc as any).priority;
+          const label = p === 1 ? 'Active Emergency' : p === 2 ? 'Breaking News' : p === 3 ? 'Important News' : p === 4 ? 'Niche News' : p === 5 ? 'Operational Updates' : null;
+          return label ? (
+            <div className="mb-2 inline-flex items-center gap-2 text-xs text-foreground/70">
+              <span className="rounded-full border px-2 py-0.5">{label}</span>
+            </div>
+          ) : null;
+        })()}
         <h1 className="text-3xl font-semibold tracking-tight" style={{ fontFamily: "var(--font-serif)" }}>
           {doc.title}
         </h1>
@@ -168,7 +177,7 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
           </section>
         )}
 
-        {/* Bottom ad slot */}
+        {/* Footer ad slot */}
         <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
           <AdsenseAd adSlot="4665141847" />
         </div>

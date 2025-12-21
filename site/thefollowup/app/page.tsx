@@ -26,6 +26,16 @@ function asUTCStart(isoOrDate: any): string {
   return new Date(Date.UTC(y, m, day, 0, 0, 0)).toISOString();
 }
 
+function priorityLabel(p?: number | null): string | null {
+  const v = typeof p === "number" ? p : null;
+  if (v === 1) return "Active Emergency";
+  if (v === 2) return "Breaking News";
+  if (v === 3) return "Important News";
+  if (v === 4) return "Niche News";
+  if (v === 5) return "Operational Updates";
+  return null;
+}
+
 export default async function Home() {
   // Fetch a pool of potential front-page articles
   const coll = await getBronzeCollection();
@@ -40,7 +50,7 @@ export default async function Home() {
   const followupsColl = await getSilverFollowupsCollection();
   const claims = (await claimsColl
     .find({ type: { $in: ["promise", "goal"] } })
-    .project({ claim: 1, type: 1, completion_condition_date: 1 })
+    .project({ claim: 1, type: 1, completion_condition_date: 1, slug: 1 })
     .toArray()) as SilverClaim[];
 
   const ids = claims
@@ -69,7 +79,7 @@ export default async function Home() {
     .map((c: any) => {
       const dueRaw = (c as any).completion_condition_date || earliestFollowupById.get(String(c._id));
       const dueISO = dueRaw ? asUTCStart(dueRaw) : "";
-      return { id: String(c._id), text: c.claim as string, dueISO };
+      return { id: String(c._id), slug: (c as any).slug || undefined, text: c.claim as string, dueISO };
     })
     .filter((r) => !!r.dueISO && new Date(r.dueISO).getTime() > now.getTime())
     .sort((a, b) => new Date(a.dueISO).getTime() - new Date(b.dueISO).getTime())
@@ -85,6 +95,11 @@ export default async function Home() {
             {hero && (
               <article className="card border border-[var(--color-border)] p-4">
                 <div className="dateline mb-1">{new Date(hero.date as any).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" })}</div>
+                {priorityLabel((hero as any).priority) && (
+                  <div className="mb-2 inline-flex items-center gap-2 text-xs text-foreground/70">
+                    <span className="rounded-full border px-2 py-0.5">{priorityLabel((hero as any).priority)}</span>
+                  </div>
+                )}
                 <h2 className="text-3xl font-semibold text-primary" style={{ fontFamily: "var(--font-serif)" }}>
                   <Link href={`/article/${(hero as any).slug || (hero as any)._id?.toString?.()}`} className="hover:underline">
                     {hero.title}
@@ -111,6 +126,11 @@ export default async function Home() {
                     }`}
                   >
                     <div className="dateline mb-1 text-xs text-foreground/70">{new Date(m.date as any).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" })}</div>
+                    {priorityLabel((m as any).priority) && (
+                      <div className="mb-1 inline-flex items-center gap-2 text-[10px] text-foreground/70">
+                        <span className="rounded-full border px-2 py-0.5">{priorityLabel((m as any).priority)}</span>
+                      </div>
+                    )}
                     <h3 className="text-lg font-semibold text-primary" style={{ fontFamily: "var(--font-serif)" }}>
                       <Link href={`/article/${(m as any).slug || (m as any)._id?.toString?.()}`} className="hover:underline">
                         {m.title}
@@ -139,7 +159,7 @@ export default async function Home() {
                 <ul className="space-y-2 text-sm">
                   {countdowns.map((c) => (
                     <li key={c.id} className="border-b border-[var(--color-border)] pb-2 last:border-b-0 last:pb-0">
-                      <Link href={`/claim/${c.id}`} className="hover:underline">
+                      <Link href={`/claim/${c.slug || c.id}`} className="hover:underline">
                         {c.text}
                       </Link>
                       <div className="text-accent"><Countdown targetISO={c.dueISO} /></div>

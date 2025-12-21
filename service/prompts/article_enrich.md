@@ -10,7 +10,7 @@ Task:
      - 2: Breaking News — extremely important to everyone in the US or world.
      - 3: Important News — important to a large subset/region (e.g., major state policy change, targeted hate crime).
      - 4: Niche News — important to small/medium subset already involved with topic.
-     - 5: Operational Updates — useful background, not particularly newsworthy.
+     - 5: Operational Updates — useful background, not particularly newsworthy. This also encompasses routine statements like celebrating holidays or honoring service members.
 
 Constraints:
 - Do not hallucinate facts.
