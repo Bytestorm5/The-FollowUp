@@ -569,7 +569,10 @@ def main():
     try:
         followup_filter = {
             'follow_up_date': pipeline_today,
-            'processed_at': {'$exists': False}
+            '$or': [
+                {'processed_at': {'$exists': False}},
+                {'processed_at': None},
+            ],
         }
         try:
             followup_filter = mongo.normalize_dates(followup_filter)
