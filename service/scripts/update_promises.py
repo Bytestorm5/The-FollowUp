@@ -19,10 +19,6 @@ if _REPO_ROOT not in sys.path:
 	sys.path.insert(0, _REPO_ROOT)
 
 load_dotenv(os.path.join(_REPO_ROOT, ".env"))
-from openai import OpenAI
-
-# OpenAI client (reads OPENAI_API_KEY, OPENAI_ORG, OPENAI_PROJECT from env)
-_OPENAI_CLIENT = OpenAI()
 
 from util import mongo
 from util.llm_web import run_with_search
@@ -98,8 +94,8 @@ def _get_pipeline_today():
 
 
 def _write_jsonl(path: str, lines):
-    # JSONL batch writing removed — Responses.parse is used instead.
-    raise RuntimeError('_write_jsonl is deprecated; use Responses.parse directly')
+    # Deprecated legacy helper
+    raise RuntimeError('_write_jsonl is deprecated; use run_with_search directly')
 
 def get_article_from_id(article_id: str) -> MongoArticle:
     article = mongo.bronze_links.find_one({'_id': ObjectId(article_id)})
@@ -109,9 +105,10 @@ def get_article_from_id(article_id: str) -> MongoArticle:
     
 
 def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str, endpoint_tpl: str, model: Optional[str] = None):
-    """Build a list of Batch API request lines (JSON-serializable dicts).
+    """Build a list of request descriptors for in-house web search pipeline.
 
     claim_pairs: iterable of (raw_doc, MongoClaim)
+    Each request contains: {custom_id, model, input}
     """
     model = model or os.environ.get('OPENAI_MODEL', 'gpt-5-nano')
     requests = []
@@ -137,8 +134,6 @@ def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str,
         article_date = getattr(claim, 'article_date', None)
         article_date_str = str(article_date) if article_date is not None else ''
 
-        #article: MongoArticle = get_article_from_id(claim.article_id)
-        
         content_parts = [tpl.strip(), "", "-- Article Metadata --"]
         content_parts.append(f"Source Article Link: {getattr(claim, 'article_link', '')}")
         content_parts.append(f"Source Article Date: {article_date_str}")
@@ -158,15 +153,8 @@ def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str,
 
         req = {
             "custom_id": str(custom_id),
-            "method": "POST",
-            "url": "/v1/responses",
-            "body": {
-                "model": model,                  # consider a model shown in the web_search guide (e.g., o4-mini)
-                "input": content,                # NOTE: input, not messages
-                "tools": [{"type": "web_search"}],
-                "tool_choice": "auto",
-                "include": ["web_search_call.action.sources"],  # if you want source URLs
-            },
+            "model": model,
+            "input": content,
         }
         requests.append(req)
         mapping[str(custom_id)] = (raw, claim, update_type)
@@ -177,20 +165,7 @@ def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str,
 
 
 
-# _call_responses_for_requests removed — we now use Responses.parse with structured outputs.
-
-
-def _read_file_text(file_id: str) -> str:
-    file_response = _OPENAI_CLIENT.files.content(file_id)
-    return getattr(file_response, 'text', None) or str(file_response)
-
-
-def _iter_jsonl(text: str):
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        yield json.loads(line)
+# Legacy OpenAI helper code removed — we now use run_with_search with structured outputs.
 
 
 def _classify_verdict(text: str) -> str:
@@ -466,15 +441,8 @@ def main():
         content = "\n".join(content_parts)
         req = {
             "custom_id": str(custom_id),
-            "method": "POST",
-            "url": "/v1/responses",
-            "body": {
-                "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
-                "input": content,
-                "tools": [{"type": "web_search"}],
-                "tool_choice": "auto",
-                "include": ["web_search_call.action.sources"],
-            },
+            "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
+            "input": content,
         }
         goals_lines.append(req)
         goals_map[str(custom_id)] = (raw, claim, None)
@@ -529,15 +497,8 @@ def main():
         content = "\n".join(parts)
         req = {
             "custom_id": str(custom_id),
-            "method": "POST",
-            "url": "/v1/responses",
-            "body": {
-                "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
-                "input": content,
-                "tools": [{"type": "web_search"}],
-                "tool_choice": "auto",
-                "include": ["web_search_call.action.sources"],
-            },
+            "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
+            "input": content,
         }
         stmt_lines.append(req)
         stmt_map[str(custom_id)] = (raw, claim, None)
@@ -609,15 +570,8 @@ def main():
 
             req = {
                 'custom_id': str(custom_id),
-                'method': 'POST',
-                'url': '/v1/responses',
-                'body': {
-                    'model': os.environ.get('OPENAI_MODEL', 'gpt-5-mini'),
-                    'input': content,
-                    'tools': [{ 'type': 'web_search' }],
-                    'tool_choice': 'auto',
-                    'include': ['web_search_call.action.sources'],
-                }
+                'model': os.environ.get('OPENAI_MODEL', 'gpt-5-mini'),
+                'input': content,
             }
             request_lines.append(req)
             # Mark mapping entry specially so processing loop knows this is a followup
@@ -633,7 +587,7 @@ def main():
         logger.info('No prompts to send in batch')
         return []
 
-    # Call Responses.parse for each request and insert results directly
+    # Call run_with_search for each request and insert results directly
     silver = db.get_collection('silver_updates')
 
     inserted = 0
@@ -668,9 +622,8 @@ def main():
             claim = None
             update_type = None
 
-        body = req.get('body', {})
-        model = body.get('model')
-        content_str = body.get('input', '')
+        model = req.get('model')
+        content_str = req.get('input', '')
         parsed_obj = None
         model_text = ''
         verdict = 'in_progress'
@@ -688,7 +641,19 @@ def main():
             parsed_obj = getattr(run_res, 'parsed', None)
             if run_res.sources:
                 try:
-                    model_text = model_text + "\n\nSources:\n" + "\n".join(run_res.sources)
+                    src_lines = []
+                    for s in run_res.sources:
+                        if isinstance(s, dict):
+                            url = s.get('url') or ''
+                            title = s.get('title') or ''
+                            if title and url:
+                                src_lines.append(f"- {title} {url}")
+                            else:
+                                src_lines.append(f"- {url or title}")
+                        else:
+                            src_lines.append(f"- {str(s)}")
+                    if src_lines:
+                        model_text = model_text + "\n\nSources:\n" + "\n".join(src_lines)
                 except Exception:
                     pass
             if parsed_obj is not None:
