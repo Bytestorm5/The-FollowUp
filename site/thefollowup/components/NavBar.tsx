@@ -82,7 +82,7 @@ export default function NavBar() {
           <div className="mt-2 font-semibold text-foreground/80">Countdowns</div>
           <Link href="/countdowns" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Active Countdowns</Link>
           <Link href="/countdowns/past" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Past Countdowns</Link>
-          <div className="mt-2 font-semibold text-foreground/80">Countdowns</div>
+          <div className="mt-2 font-semibold text-foreground/80">About</div>
           <Link href="/about" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Mission</Link>
           <Link href="/about/statistics" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Statistics</Link>
         </nav>
