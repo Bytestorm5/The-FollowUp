@@ -278,6 +278,128 @@ def next_update_date(claim: MongoClaim, today: datetime.date) -> Optional[dateti
     # After midpoint but before completion, the next is the endpoint
     return completion
 
+def compute_followup_schedule(claim: MongoClaim) -> List[datetime.date]:
+    """Return the complete planned follow-up schedule for a claim.
+
+    Rules:
+    - > 90 days: every 30 days after `article_date` up to (but not beyond) completion, then the endpoint at completion
+    - 14-90 days: single midpoint, then endpoint at completion
+    - < 14 days: only the endpoint at completion
+    """
+    if isinstance(claim.completion_condition_date, Date_Delta):
+        claim.completion_condition_date = claim.completion_condition_date._resolve_date()
+
+    assert isinstance(claim.completion_condition_date, datetime.date), (
+        f'Unexpected date type: {type(claim.completion_condition_date)} - {claim.completion_condition_date}'
+    )
+
+    completion = claim.completion_condition_date
+    start = getattr(claim, 'article_date', completion)
+
+    timespan = completion - start
+    schedule: List[datetime.date] = []
+
+    if timespan.days > 90:
+        step = start + datetime.timedelta(days=30)
+        while step < completion:
+            schedule.append(step)
+            step += datetime.timedelta(days=30)
+        schedule.append(completion)
+        if len(schedule) > 2 and schedule[-1] - schedule[-2] < datetime.timedelta(days=5):
+            # If the last update is close enough to the final date, we can accept a slightly longer window.
+            schedule.pop(-2)
+    elif timespan.days <= 14:
+        schedule.append(completion)
+    else:
+        midpoint_days = timespan.days // 2
+        midpoint = start + datetime.timedelta(days=midpoint_days)
+        if midpoint < completion:
+            schedule.append(midpoint)
+        schedule.append(completion)
+
+    return schedule
+
+def ensure_full_schedule_for_claim(raw: Any, claim: MongoClaim, today: datetime.date, db) -> int:
+    """Insert the full future follow-up schedule for a claim if none are scheduled yet.
+
+    - Only inserts dates >= `today`.
+    - If any future follow-up already exists (on or after `today`), does nothing.
+    - Returns the number of follow-ups inserted.
+    """
+    try:
+        followups_coll = db.get_collection('silver_followups')
+    except Exception:
+        logger.exception('DB does not expose silver_followups collection')
+        return 0
+
+    # If the schedule window has already fully passed, nothing to do
+    try:
+        completion = claim.completion_condition_date
+        if isinstance(completion, Date_Delta):
+            completion = completion._resolve_date()
+        if not isinstance(completion, datetime.date):
+            return 0
+        if today > completion:
+            return 0
+    except Exception:
+        logger.exception('Failed to read completion date for claim %s', raw.get('_id'))
+        return 0
+
+    # If any future followup already exists, skip scheduling
+    try:
+        filter_q = { 'claim_id': raw.get('_id'), 'follow_up_date': { '$gte': today } }
+        try:
+            filter_q = mongo.normalize_dates(filter_q)
+        except Exception:
+            logger.exception('normalize_dates failed for future-followup existence check; using raw filter')
+        if followups_coll.count_documents(filter_q, limit=1) > 0:
+            return 0
+    except Exception:
+        logger.exception('Failed checking existing future followups for claim %s', raw.get('_id'))
+        # If in doubt, continue to attempt scheduling rather than silently skipping
+
+    # Build full schedule and filter to future
+    try:
+        full_schedule = compute_followup_schedule(claim)
+    except Exception:
+        logger.exception('Failed to compute schedule for claim %s', raw.get('_id'))
+        return 0
+
+    future_dates = [d for d in full_schedule if isinstance(d, datetime.date) and d >= today]
+    if not future_dates:
+        return 0
+
+    inserted = 0
+    for d in future_dates:
+        follow_doc = {
+            'claim_id': raw.get('_id'),
+            'claim_text': getattr(claim, 'claim', ''),
+            'follow_up_date': d,
+            'article_id': getattr(claim, 'article_id', ''),
+            'article_link': getattr(claim, 'article_link', ''),
+            'model_output': f'Scheduled full plan on {today.isoformat()} (autoplan)',
+            'created_at': datetime.datetime.utcnow(),
+        }
+        try:
+            follow_obj = SilverFollowup(**follow_doc)
+            final_follow = follow_obj.model_dump() if hasattr(follow_obj, 'model_dump') else follow_obj.dict()
+            try:
+                final_follow = mongo.normalize_dates(final_follow)
+            except Exception:
+                logger.exception('Failed to normalize dates for autoplan silver_followup; inserting raw doc')
+            # Deduplicate by (claim_id, follow_up_date)
+            try:
+                if followups_coll.count_documents({ 'claim_id': final_follow.get('claim_id'), 'follow_up_date': final_follow.get('follow_up_date') }, limit=1) == 0:
+                    followups_coll.insert_one(final_follow)
+                    inserted += 1
+            except Exception:
+                followups_coll.insert_one(final_follow)
+                inserted += 1
+        except Exception:
+            logger.exception('Failed inserting autoplan followup for claim %s on %s', raw.get('_id'), d)
+
+    return inserted
+
 def _checkin_template() -> str:
     tpl_path = os.path.join(_REPO_ROOT, 'prompts', 'regular_checkin.md')
     with open(tpl_path, 'r', encoding='utf-8') as fh:
@@ -429,77 +551,20 @@ def main():
         logger.error('Mongo DB not available in util.mongo')
         return []
 
-    # Proactively schedule future follow-ups so the UI can display them.
-    proactively_scheduled = 0
+    # Ensure a one-time full schedule is present for each promise with no upcoming followups.
+    autoplan_inserted = 0
     try:
-        followups_coll = db.get_collection('silver_followups')
         for raw, claim in promises:
             try:
-                upd_type = claim_needs_update(claim)
+                inserted = ensure_full_schedule_for_claim(raw, claim, pipeline_today, db)
+                autoplan_inserted += inserted
             except Exception:
-                logger.exception('Failed to evaluate update type for claim %s', raw.get('_id'))
+                logger.exception('Autoplan scheduling failed for claim %s', raw.get('_id'))
                 continue
-
-            if upd_type != UpdateType.NO_UPDATE:
-                continue
-
-            try:
-                nxt = next_update_date(claim, pipeline_today)
-            except Exception:
-                logger.exception('Failed computing next update date for claim %s', raw.get('_id'))
-                nxt = None
-
-            if nxt is None:
-                continue
-
-            # Skip if there's already a followup with the same date (processed or not)
-            try:
-                followup_filter = { 'claim_id': raw.get('_id'), 'follow_up_date': nxt }
-                try:
-                    followup_filter = mongo.normalize_dates(followup_filter)
-                except Exception:
-                    logger.exception('normalize_dates failed for proactive followup equality check; using raw filter')
-                existing = followups_coll.count_documents(followup_filter, limit=1)
-            except Exception:
-                logger.exception('Failed checking existing followups for claim %s', raw.get('_id'))
-                existing = 0
-
-            if existing:
-                continue
-
-            # Insert a proactive followup record
-            follow_doc = {
-                'claim_id': raw.get('_id'),
-                'claim_text': getattr(claim, 'claim', ''),
-                'follow_up_date': nxt,
-                'article_id': getattr(claim, 'article_id', ''),
-                'article_link': getattr(claim, 'article_link', ''),
-                'model_output': f'Scheduled proactively on {pipeline_today.isoformat()} for next planned update',
-                'created_at': datetime.datetime.utcnow(),
-            }
-
-            try:
-                follow_obj = SilverFollowup(**follow_doc)
-                final_follow = follow_obj.model_dump() if hasattr(follow_obj, 'model_dump') else follow_obj.dict()
-                try:
-                    final_follow = mongo.normalize_dates(final_follow)
-                except Exception:
-                    logger.exception('Failed to normalize dates for proactive silver_followup; inserting raw doc')
-                # Final dedup check, then insert
-                try:
-                    if followups_coll.count_documents({ 'claim_id': final_follow.get('claim_id'), 'follow_up_date': final_follow.get('follow_up_date') }, limit=1) == 0:
-                        followups_coll.insert_one(final_follow)
-                        proactively_scheduled += 1
-                except Exception:
-                    followups_coll.insert_one(final_follow)
-                    proactively_scheduled += 1
-            except Exception:
-                logger.exception('Failed inserting proactive followup for claim %s', raw.get('_id'))
-
-        if proactively_scheduled:
-            logger.info(f'Proactively scheduled {proactively_scheduled} future follow-ups')
+        if autoplan_inserted:
+            logger.info(f'Autoplan scheduled {autoplan_inserted} follow-ups across promises')
     except Exception:
-        logger.exception('Unexpected error while proactively scheduling follow-ups')
+        logger.exception('Unexpected error while autoplan scheduling follow-ups')
 
     try:
         followup_filter = {
@@ -736,21 +801,36 @@ def main():
                 'created_at': datetime.datetime.utcnow(),
             }
 
-        if follow_date is not None and not is_followup:
+        if follow_date is not None:
             try:
-                follow_doc = {
-                    'claim_id': raw.get('_id'),
-                    'claim_text': getattr(claim, 'claim', ''),
-                    'follow_up_date': follow_date,
-                    'article_id': getattr(claim, 'article_id', ''),
-                    'article_link': getattr(claim, 'article_link', ''),
-                    'model_output': _norm_model_output(parsed_obj) if parsed_obj is not None else model_text,
-                    'created_at': datetime.datetime.utcnow(),
-                }
+                if is_followup and followup_doc is not None:
+                    follow_doc = {
+                        'claim_id': followup_doc.get('claim_id'),
+                        'claim_text': followup_doc.get('claim_text', ''),
+                        'follow_up_date': follow_date,
+                        'article_id': followup_doc.get('article_id', ''),
+                        'article_link': followup_doc.get('article_link', ''),
+                        'model_output': _norm_model_output(parsed_obj) if parsed_obj is not None else model_text,
+                        'created_at': datetime.datetime.utcnow(),
+                    }
+                else:
+                    follow_doc = {
+                        'claim_id': raw.get('_id'),
+                        'claim_text': getattr(claim, 'claim', ''),
+                        'follow_up_date': follow_date,
+                        'article_id': getattr(claim, 'article_id', ''),
+                        'article_link': getattr(claim, 'article_link', ''),
+                        'model_output': _norm_model_output(parsed_obj) if parsed_obj is not None else model_text,
+                        'created_at': datetime.datetime.utcnow(),
+                    }
                 try:
                     follow_obj = SilverFollowup(**follow_doc)
                 except Exception:
-                    logger.exception(f'Failed to construct SilverFollowup for claim {raw.get("_id")}; follow_doc={follow_doc}')
+                    logger.exception(
+                        'Failed to construct SilverFollowup for %s; follow_doc=%s',
+                        (followup_doc.get('_id') if is_followup and followup_doc else raw.get('_id')),
+                        follow_doc,
+                    )
                     follow_obj = None
 
                 if follow_obj is not None:
@@ -767,7 +847,10 @@ def main():
                         # Deduplicate by (claim_id, follow_up_date) regardless of processed state
                         if fcoll.count_documents({ 'claim_id': final_follow.get('claim_id'), 'follow_up_date': final_follow.get('follow_up_date') }, limit=1) == 0:
                             fcoll.insert_one(final_follow)
-                            logger.info(f"Inserted follow-up for claim {raw.get('_id')} on {follow_date}")
+                            logger.info(
+                                'Inserted follow-up for claim %s on %s',
+                                (final_follow.get('claim_id')), follow_date,
+                            )
                     except Exception:
                         logger.exception('Failed to insert into silver_followups')
             except Exception:
