@@ -54,6 +54,14 @@ export default function NavBar() {
               <Link href="/about/statistics" className="block rounded px-3 py-2 hover:bg-black/5">Statistics</Link>
             </div>
           </div>
+
+          <Link href="/search" className="flex items-center gap-2 text-sm font-medium text-foreground hover:opacity-80">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            {/* <span>Search</span> */}
+          </Link>
         </nav>
       </div>
 
@@ -79,6 +87,7 @@ export default function NavBar() {
         <nav className="flex flex-col gap-2 text-sm">
           <Link href="/feed" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Feed</Link>
           <Link href="/fact_checks" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Fact Checks</Link>
+          <Link href="/search" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Search</Link>
           <div className="mt-2 font-semibold text-foreground/80">Countdowns</div>
           <Link href="/countdowns" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Active Countdowns</Link>
           <Link href="/countdowns/past" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Past Countdowns</Link>

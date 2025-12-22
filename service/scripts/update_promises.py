@@ -8,11 +8,7 @@ import json
 import time
 import logging
 
-load_dotenv()
-from openai import OpenAI
 
-# OpenAI client (reads OPENAI_API_KEY, OPENAI_ORG, OPENAI_PROJECT from env)
-_OPENAI_CLIENT = OpenAI()
 
 import pymongo
 from bson import ObjectId
@@ -22,7 +18,14 @@ _REPO_ROOT = os.path.abspath(os.path.join(_HERE, '..'))
 if _REPO_ROOT not in sys.path:
 	sys.path.insert(0, _REPO_ROOT)
 
+load_dotenv(os.path.join(_REPO_ROOT, ".env"))
+from openai import OpenAI
+
+# OpenAI client (reads OPENAI_API_KEY, OPENAI_ORG, OPENAI_PROJECT from env)
+_OPENAI_CLIENT = OpenAI()
+
 from util import mongo
+from util.llm_web import run_with_search
 from models import MongoClaim, Date_Delta, SilverUpdate, MongoArticle, ModelResponseOutput, SilverFollowup, FactCheckResponseOutput
 
 try:
@@ -105,7 +108,7 @@ def get_article_from_id(article_id: str) -> MongoArticle:
     return MongoArticle(**article)
     
 
-def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str, endpoint_tpl: str, model: str = None):
+def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str, endpoint_tpl: str, model: Optional[str] = None):
     """Build a list of Batch API request lines (JSON-serializable dicts).
 
     claim_pairs: iterable of (raw_doc, MongoClaim)
@@ -582,7 +585,7 @@ def main():
         # Only process today's followups on the last run of the day (EST, fixed UTC-5)
         try:
             from util.timezone import now_utc_minus_5 as _now_minus5
-            if _now_minus5().hour < 23:
+            if _now_minus5().hour < 23 and False:
                 followups_cursor = []
             else:
                 followups_cursor = db.get_collection('silver_followups').find(followup_filter)
@@ -667,75 +670,46 @@ def main():
 
         body = req.get('body', {})
         model = body.get('model')
-        input_arg = body.get('messages') or [{"role": "user", "content": body.get('input', '')}]
-
+        content_str = body.get('input', '')
         parsed_obj = None
         model_text = ''
         verdict = 'in_progress'
-        max_validation_retries = 3
-        for attempt in range(1, max_validation_retries + 1):
+        try:
+            # Choose schema based on custom id (statements use fact check schema)
+            use_factcheck = False
             try:
-                # Choose schema based on custom id
+                use_factcheck = str(custom_id).startswith("statement:")
+            except Exception:
                 use_factcheck = False
+            schema = FactCheckResponseOutput if use_factcheck else ModelResponseOutput
+
+            run_res = run_with_search(content_str, model=model, text_format=schema)
+            model_text = (run_res.text or '').strip()
+            parsed_obj = getattr(run_res, 'parsed', None)
+            if run_res.sources:
                 try:
-                    use_factcheck = str(custom_id).startswith("statement:")
+                    model_text = model_text + "\n\nSources:\n" + "\n".join(run_res.sources)
                 except Exception:
-                    use_factcheck = False
-
-                resp = _OPENAI_CLIENT.responses.parse(
-                    model=model,
-                    input=input_arg,
-                    text_format=FactCheckResponseOutput if use_factcheck else ModelResponseOutput,
-                    tools=body.get('tools'),
-                    tool_choice=body.get('tool_choice'),
-                    include=body.get('include'),
-                )
-
-                parsed_obj = getattr(resp, 'output_parsed', None) or (resp.get('output_parsed') if isinstance(resp, dict) else None)
-                if parsed_obj is not None:
-                    # Coerce parsed object to the expected Pydantic model if needed
-                    if use_factcheck and not isinstance(parsed_obj, FactCheckResponseOutput):
-                        try:
-                            if hasattr(FactCheckResponseOutput, 'model_validate'):
-                                parsed_obj = FactCheckResponseOutput.model_validate(parsed_obj)  # type: ignore[attr-defined]
-                            else:
-                                parsed_obj = FactCheckResponseOutput.parse_obj(parsed_obj)  # type: ignore[attr-defined]
-                        except Exception as e:
-                            if PydanticCoreValidationError is not None and isinstance(e, PydanticCoreValidationError):
-                                logger.warning(f'ValidationError validating fact-check parsed response (attempt {attempt}/{max_validation_retries}) for custom_id={custom_id}; retrying')
-                                parsed_obj = None
-                                time.sleep(1)
-                                continue
-                            parsed_obj = None
-                    if (not use_factcheck) and not isinstance(parsed_obj, ModelResponseOutput):
-                        try:
-                            if hasattr(ModelResponseOutput, 'model_validate'):
-                                parsed_obj = ModelResponseOutput.model_validate(parsed_obj)  # type: ignore[attr-defined]
-                            else:
-                                parsed_obj = ModelResponseOutput.parse_obj(parsed_obj)  # type: ignore[attr-defined]
-                        except Exception as e:
-                            if PydanticCoreValidationError is not None and isinstance(e, PydanticCoreValidationError):
-                                logger.warning(f'ValidationError validating parsed response (attempt {attempt}/{max_validation_retries}) for custom_id={custom_id}; retrying')
-                                parsed_obj = None
-                                time.sleep(1)
-                                continue
-                            parsed_obj = None
-
-                if parsed_obj is not None:
-                    # For fact checks store detailed verdict directly; for others keep legacy values
+                    pass
+            if parsed_obj is not None:
+                try:
                     if use_factcheck:
                         fc_verdict = getattr(parsed_obj, 'verdict', '')
                         verdict = str(fc_verdict) or verdict
                     else:
                         verdict = getattr(parsed_obj, 'verdict', verdict)
-                    model_text = getattr(parsed_obj, 'text', '') or model_text
-                break
-            except Exception:
-                logger.exception(f'Error calling Responses.parse for custom_id={custom_id} (attempt {attempt})')
-                model_text = 'error calling responses.parse'
-                verdict = 'failed'
-                parsed_obj = None
-                break
+                    # Prefer parsed text field when present
+                    pt = getattr(parsed_obj, 'text', '')
+                    if pt:
+                        model_text = str(pt)
+                except Exception:
+                    pass
+            else:
+                verdict = _classify_verdict(model_text)
+        except Exception:
+            logger.exception(f'Error calling run_with_search for custom_id={custom_id}')
+            model_text = 'error calling run_with_search'
+            verdict = 'failed'
 
         def _coerce_date(val):
             if val is None:
