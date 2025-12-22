@@ -363,6 +363,11 @@ def main():
     request_lines.extend(goals_lines)
     mapping.update(goals_map)
 
+    # Ensure DB is available before querying followups
+    db = getattr(mongo, 'DB', None)
+    if db is None:
+        logger.error('Mongo DB not available in util.mongo')
+        return []
     # Statements: do not revisit unless a follow-up date was given (handled by scheduled followups)
     # Therefore, only include statements that have never been fact-checked (no latest update)
     updates_coll = db.get_collection('silver_updates')
