@@ -31,13 +31,7 @@ except Exception:
     PydanticCoreValidationError = None
 
 logger = logging.getLogger(__name__)
-
-# Console logging to stdout
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+logger.setLevel(logging.INFO)
 
 def _is_terminal_verdict(v: Optional[str]) -> bool:
     if not v:
@@ -828,6 +822,14 @@ def main():
 if __name__ == "__main__":
     import argparse
     import os
+    
+    # Configure console logging only when executed as a script
+    if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
+        _console_handler = logging.StreamHandler(sys.stdout)
+        _console_handler.setLevel(logging.INFO)
+        _console_formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
+        _console_handler.setFormatter(_console_formatter)
+        logger.addHandler(_console_handler)
 
     parser = argparse.ArgumentParser(description='Run update_promises main')
     parser.add_argument('--date', help='Pipeline date to use (YYYY-MM-DD). If provided, sets PIPELINE_RUN_DATE')
