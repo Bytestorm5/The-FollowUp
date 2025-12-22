@@ -124,3 +124,24 @@ export async function getSilverUpdatesCollection(): Promise<Collection<SilverUpd
   const db = await getDb();
   return db.collection<SilverUpdate>("silver_updates");
 }
+
+export interface SilverLog {
+  _id?: ObjectId;
+  run_started_at: Date | string;
+  run_finished_at: Date | string;
+  pipeline_date?: string;
+  scrape?: { inserted?: number; updated?: number };
+  enrich?: { priority_counts?: Record<string, number> };
+  claims?: { priority_counts?: Record<string, number> };
+  updates?: {
+    window?: { from?: Date | string; to?: Date | string };
+    total_inserted?: number;
+    by_verdict?: Record<string, number>;
+    by_type?: Record<string, number>;
+  };
+}
+
+export async function getSilverLogsCollection(): Promise<Collection<SilverLog>> {
+  const db = await getDb();
+  return db.collection<SilverLog>("silver_logs");
+}
