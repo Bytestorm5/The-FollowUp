@@ -110,7 +110,7 @@ def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str,
 
     claim_pairs: iterable of (raw_doc, MongoClaim)
     """
-    model = model or os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
+    model = model or os.environ.get('OPENAI_MODEL', 'gpt-5-nano')
     requests = []
     mapping = {}
     for idx, (raw, claim) in enumerate(claim_pairs):
@@ -466,7 +466,7 @@ def main():
             "method": "POST",
             "url": "/v1/responses",
             "body": {
-                "model": os.environ.get('OPENAI_MODEL', 'gpt-4o-mini'),
+                "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
                 "input": content,
                 "tools": [{"type": "web_search"}],
                 "tool_choice": "auto",
@@ -529,7 +529,7 @@ def main():
             "method": "POST",
             "url": "/v1/responses",
             "body": {
-                "model": os.environ.get('OPENAI_MODEL', 'gpt-4o-mini'),
+                "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
                 "input": content,
                 "tools": [{"type": "web_search"}],
                 "tool_choice": "auto",

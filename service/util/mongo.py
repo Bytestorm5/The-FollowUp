@@ -1,7 +1,14 @@
 from pymongo import MongoClient
 from dotenv import load_dotenv
-import os
-load_dotenv()
+import os, sys
+
+
+_HERE = os.path.dirname(__file__)
+_SERVICE_ROOT = os.path.abspath(os.path.join(_HERE, '..'))
+if _SERVICE_ROOT not in sys.path:
+    sys.path.insert(0, _SERVICE_ROOT)
+
+load_dotenv(os.path.join(_SERVICE_ROOT, '.env'))
 client = MongoClient(os.environ.get('MONGO_URI'))
 DB = client.get_database("TheFollowup")
 bronze_links = DB.get_collection("bronze_links")
