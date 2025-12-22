@@ -50,6 +50,9 @@ export default function NavBar() {
           </div>
           <div className="relative inline-block group">
             <Link href="/about" className="text-sm font-medium text-foreground hover:opacity-80">About</Link>
+            <div className="invisible absolute left-1/2 top-full z-50 w-44 -translate-x-1/2 rounded-md border border-[var(--color-border)] bg-background p-1 text-sm opacity-0 shadow-md transition group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto">
+              <Link href="/about/statistics" className="block rounded px-3 py-2 hover:bg-black/5">Statistics</Link>
+            </div>
           </div>
         </nav>
       </div>
@@ -79,7 +82,9 @@ export default function NavBar() {
           <div className="mt-2 font-semibold text-foreground/80">Countdowns</div>
           <Link href="/countdowns" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Active Countdowns</Link>
           <Link href="/countdowns/past" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Past Countdowns</Link>
-          <Link href="/about" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>About</Link>
+          <div className="mt-2 font-semibold text-foreground/80">Countdowns</div>
+          <Link href="/about" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Mission</Link>
+          <Link href="/about/statistics" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Statistics</Link>
         </nav>
       </aside>
     </header>
