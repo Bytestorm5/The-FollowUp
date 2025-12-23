@@ -475,13 +475,18 @@ def main():
                     if isinstance(mo, dict):
                         vraw = mo.get('verdict')
                         mo_v = (vraw or '').strip().lower() if isinstance(vraw, str) else str(vraw or '').strip().lower()
-                    # Treat either top-level or response-object verdict as authoritative
-                    if mo_v == 'in_progress' or top_v == 'in_progress':
+                    mo_is_error = isinstance(mo, str) and mo.strip().lower().startswith('error calling')
+                    # Treat either top-level or response-object verdict as authoritative, or delete errored runs
+                    if mo_is_error or mo_v == 'in_progress' or top_v == 'in_progress':
                         try:
                             updates_coll.delete_one({ '_id': last_doc.get('_id') })
-                            logger.info('Deleted in_progress fact check update for claim %s; re-running', raw.get('_id'))
+                            if mo_is_error:
+                                logger.info('Deleted errored fact check update for claim %s; re-running', raw.get('_id'))
+                            else:
+                                logger.info('Deleted in_progress fact check update for claim %s; re-running', raw.get('_id'))
                         except Exception:
-                            logger.exception('Failed deleting in_progress update for claim %s; proceeding to re-run anyway', raw.get('_id'))
+                            reason = 'errored' if mo_is_error else 'in_progress'
+                            logger.exception('Failed deleting %s update for claim %s; proceeding to re-run anyway', reason, raw.get('_id'))
                         filtered_statements.append((raw, claim))
                         continue
                     # Otherwise, already fact-checked with a definitive verdict; skip for now
