@@ -35,6 +35,6 @@ def pipeline_today() -> _dt.date:
     return today_utc_minus_5()
 
 
-def pipeline_yesterday() -> _dt.date:
+def pipeline_date() -> _dt.date:
     """Return pipeline 'yesterday' relative to fixed UTC-5."""
-    return today_utc_minus_5() - _dt.timedelta(days=1)
+    return today_utc_minus_5()

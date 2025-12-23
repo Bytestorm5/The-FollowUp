@@ -44,12 +44,11 @@ def main() -> int:
     else:
         try:
             # Prefer our fixed UTC-5 computation when available
-            from util.timezone import pipeline_yesterday
-            run_date = pipeline_yesterday()
+            from util.timezone import pipeline_date
+            run_date = pipeline_date()
         except Exception:
             # Fallback: system local yesterday
-            run_date = datetime.date.today() - datetime.timedelta(days=1)
-
+            run_date = datetime.date.today()
     print(f"\nRunning pipeline for date: {run_date}")
     date_str = run_date.isoformat()
 
