@@ -462,9 +462,8 @@ def main():
     for raw, claim in statements_fu:
         try:
             latest = updates_coll.find(
-                { 'claim_id': raw.get('_id') },
-                { 'projection': { 'verdict': 1, 'model_output': 1, 'created_at': 1 } }
-            ).sort([('created_at', -1), ('_id', -1)]).limit(1)
+                { 'claim_id': raw.get('_id') }
+            ).sort([('created_at', -1), ('_id', -1)])
             latest_list = list(latest)
             if latest_list:
                 # If latest fact check's response object verdict is in_progress, delete it and re-run

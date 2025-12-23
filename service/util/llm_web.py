@@ -313,20 +313,13 @@ def run_with_search(input_text: str, model: str = "gpt-5-mini", text_format: Opt
         max_turns = 8
         last_response: Any = None
 
+        # Main loop: always run WITHOUT structured parsing so tools can iterate freely
         for _ in range(max_turns):
-            if text_format is not None:
-                response = _CLIENT.responses.parse(
-                    model=model,
-                    tools=tools, # type: ignore[arg-type]
-                    input=messages, # type: ignore[arg-type]
-                    text_format=text_format, # type: ignore[arg-type]
-                )
-            else:
-                response = _CLIENT.responses.create(  # type: ignore[arg-type]
-                    model=model,
-                    tools=tools,  # type: ignore[arg-type]
-                    input=messages,  # type: ignore[arg-type]
-                )
+            response = _CLIENT.responses.create(  # type: ignore[arg-type]
+                model=model,
+                tools=tools,  # type: ignore[arg-type]
+                input=messages,  # type: ignore[arg-type]
+            )
             last_response = response
 
             # Accumulate output content for the conversation state
@@ -366,20 +359,38 @@ def run_with_search(input_text: str, model: str = "gpt-5-mini", text_format: Opt
                 break
 
         final_text = _extract_response_text(last_response) if last_response is not None else ""
+
+        # If we have text and a schema, do a final parse-only pass to reformat
+        parsed_obj: Optional[Any] = None
+        if final_text.strip() and text_format is not None:
+            try:
+                parse_messages = list(messages) + [
+                    {"role": "user", "content": f"Reformat your final answer above into the requested structured output. Only return the structured fields. The following is the schema you must match:\n{json.dumps(text_format.model_json_schema())}"}
+                ]
+                parse_resp = _CLIENT.responses.parse(
+                    model=model,
+                    input=parse_messages,  # type: ignore[arg-type]
+                    text_format=text_format,  # type: ignore[arg-type]
+                )
+                parsed_obj = getattr(parse_resp, "output_parsed", None)
+            except Exception:
+                # If parsing fails, we still return the unstructured text
+                logger.exception("Structured parsing failed; returning unstructured text only")
+
         if final_text.strip():
-            if text_format is None or last_response is None:
+            if text_format is None:
                 return SearchOutput(text=final_text, sources=sources, messages=messages)
             else:
-                return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=last_response.output_parsed)
+                return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=parsed_obj)
         else:
             if attempt < 3:
                 print(f"Error: empty response text; retrying ({attempt}/3)")
             else:
                 # Final attempt, return whatever we have
-                if text_format is None or last_response is None:
+                if text_format is None:
                     return SearchOutput(text=final_text, sources=sources, messages=messages)
                 else:
-                    return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=last_response.output_parsed)
+                    return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=None)
 
 if __name__ == "__main__":
     class Test(BaseModel):
