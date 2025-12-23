@@ -461,12 +461,36 @@ def main():
     filtered_statements: List[Tuple[Any, MongoClaim]] = []
     for raw, claim in statements_fu:
         try:
-            latest = updates_coll.find({ 'claim_id': raw.get('_id') }, { 'projection': { 'verdict': 1, 'model_output': 1, 'created_at': 1 } })\
-                                .sort([('created_at', -1), ('_id', -1)]).limit(1)
+            latest = updates_coll.find(
+                { 'claim_id': raw.get('_id') },
+                { 'projection': { 'verdict': 1, 'model_output': 1, 'created_at': 1 } }
+            ).sort([('created_at', -1), ('_id', -1)]).limit(1)
             latest_list = list(latest)
             if latest_list:
-                # Already fact-checked at least once; rely on scheduled followups instead of revisiting now
-                continue
+                # If latest fact check's response object verdict is in_progress, delete it and re-run
+                try:
+                    last_doc = latest_list[0]
+                    top_v = (last_doc.get('verdict') or '').strip().lower() if isinstance(last_doc.get('verdict'), str) else str(last_doc.get('verdict') or '').strip().lower()
+                    mo = last_doc.get('model_output')
+                    mo_v = ''
+                    if isinstance(mo, dict):
+                        vraw = mo.get('verdict')
+                        mo_v = (vraw or '').strip().lower() if isinstance(vraw, str) else str(vraw or '').strip().lower()
+                    # Treat either top-level or response-object verdict as authoritative
+                    if mo_v == 'in_progress' or top_v == 'in_progress':
+                        try:
+                            updates_coll.delete_one({ '_id': last_doc.get('_id') })
+                            logger.info('Deleted in_progress fact check update for claim %s; re-running', raw.get('_id'))
+                        except Exception:
+                            logger.exception('Failed deleting in_progress update for claim %s; proceeding to re-run anyway', raw.get('_id'))
+                        filtered_statements.append((raw, claim))
+                        continue
+                    # Otherwise, already fact-checked with a definitive verdict; skip for now
+                    continue
+                except Exception:
+                    # On any parsing error, conservatively skip to avoid churn
+                    continue
+            # No prior fact check; include for first run
             filtered_statements.append((raw, claim))
         except Exception:
             # If anything fails, keep it in to avoid missing checks

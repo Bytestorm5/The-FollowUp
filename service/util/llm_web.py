@@ -293,82 +293,93 @@ def _dedupe_add_source(sources: List[Dict[str, Any]], src: Dict[str, Any]):
 
 
 SYSTEM_PROMPT = """
-You are an expert news analyst and researcher. 
-The user will describe a well-defined task with the expectation that you will use the tools available to you to complete it. 
-This is an automatic task and you will not receive any responses if you ask for clarifying questions or try to prompt further discussion.
-You should provide a complete report that follows the instructions given without asking the user for further clarification or suggesting next steps. 
-Do not try to "chat" with the user.
+You are an expert news analyst and researcher.
+The user will give a well-defined task. Use your available tools to complete the task as described.
+This task is automatic: do not ask clarifying questions, engage in further discussion, or prompt the user for more information.
+Provide a comprehensive report that fully meets the instructions. Do not include suggestions for next steps or use conversational language.
 """
 
 def run_with_search(input_text: str, model: str = "gpt-5-mini", text_format: Optional[Union[type[BaseModel], BaseModel]]  = None) -> SearchOutput:
-    messages: List[Any] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": input_text}
-    ]
-    tools = _tool_defs()
-    sources: List[Dict[str, Any]] = []
+    # Up to 3 attempts if the response text is empty
+    for attempt in range(1, 4):
+        messages: List[Any] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": input_text}
+        ]
+        tools = _tool_defs()
+        sources: List[Dict[str, Any]] = []
 
-    # Guard against infinite loops
-    max_turns = 8
-    last_response: Any = None
+        # Guard against infinite loops
+        max_turns = 8
+        last_response: Any = None
 
-    for _ in range(max_turns):
-        if text_format is not None:
-            response = _CLIENT.responses.parse(
-                model=model,
-                tools=tools, # type: ignore[arg-type]
-                input=messages, # type: ignore[arg-type]
-                text_format=text_format, # type: ignore[arg-type]
-            )
+        for _ in range(max_turns):
+            if text_format is not None:
+                response = _CLIENT.responses.parse(
+                    model=model,
+                    tools=tools, # type: ignore[arg-type]
+                    input=messages, # type: ignore[arg-type]
+                    text_format=text_format, # type: ignore[arg-type]
+                )
+            else:
+                response = _CLIENT.responses.create(  # type: ignore[arg-type]
+                    model=model,
+                    tools=tools,  # type: ignore[arg-type]
+                    input=messages,  # type: ignore[arg-type]
+                )
+            last_response = response
+
+            # Accumulate output content for the conversation state
+            messages += response.output
+
+            # Handle tool calls, if any
+            had_tool_call = False
+            for item in response.output:
+                if getattr(item, "type", None) == "function_call":
+                    had_tool_call = True
+                    name_any = getattr(item, "name", None)
+                    name = name_any if isinstance(name_any, str) else str(name_any or "")
+                    args_raw = getattr(item, "arguments", "{}")
+                    try:
+                        args = json.loads(args_raw) if isinstance(args_raw, str) else (args_raw or {})
+                    except Exception:
+                        args = {}
+                    result = _handle_tool_call(name, args)
+
+                    # Collect sources from tool outputs
+                    if name == "ddg_web_search":
+                        # Just web search alone isn't enough to count as a source.
+                        pass
+                        # for r in result.get("results", []) or []:
+                        #     _dedupe_add_source(sources, r)
+                    elif name == "fetch_url":
+                        _dedupe_add_source(sources, result)
+
+                    messages.append({
+                        "type": "function_call_output",
+                        "call_id": getattr(item, "call_id", None),
+                        "output": json.dumps(result),
+                    })
+
+            # If no tool calls were made, we're done
+            if not had_tool_call:
+                break
+
+        final_text = _extract_response_text(last_response) if last_response is not None else ""
+        if final_text.strip():
+            if text_format is None or last_response is None:
+                return SearchOutput(text=final_text, sources=sources, messages=messages)
+            else:
+                return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=last_response.output_parsed)
         else:
-            response = _CLIENT.responses.create(  # type: ignore[arg-type]
-                model=model,
-                tools=tools,  # type: ignore[arg-type]
-                input=messages,  # type: ignore[arg-type]
-            )
-        last_response = response
-
-        # Accumulate output content for the conversation state
-        messages += response.output
-
-        # Handle tool calls, if any
-        had_tool_call = False
-        for item in response.output:
-            if getattr(item, "type", None) == "function_call":
-                had_tool_call = True
-                name_any = getattr(item, "name", None)
-                name = name_any if isinstance(name_any, str) else str(name_any or "")
-                args_raw = getattr(item, "arguments", "{}")
-                try:
-                    args = json.loads(args_raw) if isinstance(args_raw, str) else (args_raw or {})
-                except Exception:
-                    args = {}
-                result = _handle_tool_call(name, args)
-
-                # Collect sources from tool outputs
-                if name == "ddg_web_search":
-                    # Just web search alone isn't enough to count as a source.
-                    pass
-                    # for r in result.get("results", []) or []:
-                    #     _dedupe_add_source(sources, r)
-                elif name == "fetch_url":
-                    _dedupe_add_source(sources, result)
-
-                messages.append({
-                    "type": "function_call_output",
-                    "call_id": getattr(item, "call_id", None),
-                    "output": json.dumps(result),
-                })
-
-        # If no tool calls were made, we're done
-        if not had_tool_call:
-            break
-
-    final_text = _extract_response_text(last_response) if last_response is not None else ""
-    if text_format is None or last_response is None:
-        return SearchOutput(text=final_text, sources=sources, messages=messages)
-    else:
-        return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=last_response.output_parsed)
+            if attempt < 3:
+                print(f"Error: empty response text; retrying ({attempt}/3)")
+            else:
+                # Final attempt, return whatever we have
+                if text_format is None or last_response is None:
+                    return SearchOutput(text=final_text, sources=sources, messages=messages)
+                else:
+                    return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=last_response.output_parsed)
 
 if __name__ == "__main__":
     class Test(BaseModel):
