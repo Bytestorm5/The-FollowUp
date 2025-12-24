@@ -89,8 +89,14 @@ def _build_requests(
         
         content_body = doc.get('clean_markdown') or doc.get('raw_content', 'Unknown Content')
         doc_format = f"""Title: {doc.get('title', 'Unknown Title')}\nTimestamp: {doc.get('date')}\nTags: {','.join(doc.get('tags', []))}\nSource: {doc.get('link', 'Unknown Source')}\n\nContent (Markdown):\n{content_body}"""
-        
-        content = template.replace('{{SCHEMA}}', schema_json).replace('{{ARTICLE}}', doc_format)
+        # Build system prompt with static instructions + schema, excluding ARTICLE placeholder
+        sys_full = template.replace('{{SCHEMA}}', schema_json)
+        split_tok = "\n----\nARTICLE:"
+        if split_tok in sys_full:
+            sys_prompt = sys_full.split(split_tok, 1)[0].rstrip()
+        else:
+            sys_prompt = sys_full
+        user_content = f"ARTICLE:\n{doc_format}"
         requests.append(
             {
                 "custom_id": article_id,
@@ -99,7 +105,8 @@ def _build_requests(
                 "body": {
                     "model": model,
                     "messages": [
-                        {"role": "user", "content": content},
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_content},
                     ],
                     "response_format": response_format,
                 },
@@ -143,7 +150,14 @@ def _fallback_process_with_responses(
             article_id = str(doc.get('_id'))
             content_body = doc.get('clean_markdown') or doc.get('raw_content', 'Unknown Content')
             doc_format = f"""Title: {doc.get('title', 'Unknown Title')}\nTimestamp: {doc.get('date')}\nTags: {','.join(doc.get('tags', []))}\nSource: {doc.get('link', 'Unknown Source')}\n\nContent (Markdown):\n{content_body}"""
-            content = template.replace('{{SCHEMA}}', schema_json).replace('{{ARTICLE}}', doc_format)
+            # Build system + user messages instead of concatenated content
+            sys_full = template.replace('{{SCHEMA}}', schema_json)
+            split_tok = "\n----\nARTICLE:"
+            if split_tok in sys_full:
+                sys_prompt = sys_full.split(split_tok, 1)[0].rstrip()
+            else:
+                sys_prompt = sys_full
+            user_content = f"ARTICLE:\n{doc_format}"
 
             # Use Responses API with structured parsing to ClaimProcessingResult
             max_retries = 3
@@ -152,7 +166,10 @@ def _fallback_process_with_responses(
                 try:
                     resp = _OPENAI_CLIENT.responses.parse(
                         model=model,
-                        input=content,
+                        input=[
+                            {"role": "system", "content": sys_prompt},
+                            {"role": "user", "content": user_content},
+                        ],
                         text_format=ClaimProcessingResult,
                     )
                     parsed = getattr(resp, 'output_parsed', None) or (

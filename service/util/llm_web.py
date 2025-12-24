@@ -294,18 +294,28 @@ def _dedupe_add_source(sources: List[Dict[str, Any]], src: Dict[str, Any]):
 
 SYSTEM_PROMPT = """
 You are an expert news analyst and researcher.
-The user will give a well-defined task. Use your available tools to complete the task as described.
-This task is automatic: do not ask clarifying questions, engage in further discussion, or prompt the user for more information.
+The system will give a well-defined task. Use your available tools to complete the task as described.
+This task is automatic: do not ask clarifying questions, engage in further discussion, or prompt the system for more information.
 Provide a comprehensive report that fully meets the instructions. Do not include suggestions for next steps or use conversational language.
 """
 
-def run_with_search(input_text: str, model: str = "gpt-5-mini", text_format: Optional[Union[type[BaseModel], BaseModel]]  = None) -> SearchOutput:
+def run_with_search(
+    input_text: str,
+    model: str = "gpt-5-mini",
+    text_format: Optional[Union[type[BaseModel], BaseModel]]  = None,
+    task_system: Optional[str] = None,
+) -> SearchOutput:
     # Up to 3 attempts if the response text is empty
     for attempt in range(1, 4):
         messages: List[Any] = [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": input_text}
         ]
+        if task_system and str(task_system).strip():
+            messages = [
+                {"role": "developer", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": str(task_system).strip()},
+            ]
+        messages.append({"role": "user", "content": input_text})
         tools = _tool_defs()
         sources: List[Dict[str, Any]] = []
 
@@ -391,6 +401,9 @@ def run_with_search(input_text: str, model: str = "gpt-5-mini", text_format: Opt
                     return SearchOutput(text=final_text, sources=sources, messages=messages)
                 else:
                     return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=None)
+
+    # Fallback return to satisfy type checkers; should be unreachable
+    return SearchOutput(text="", sources=[], messages=[])
 
 if __name__ == "__main__":
     class Test(BaseModel):

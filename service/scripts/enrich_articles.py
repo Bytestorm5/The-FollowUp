@@ -35,7 +35,7 @@ def _load_template() -> str:
         return fh.read()
 
 
-def _build_input(article: Dict[str, Any], template: str) -> str:
+def _build_input(article: Dict[str, Any]) -> str:
     title = article.get('title', '')
     date = article.get('date', '')
     link = article.get('link', '')
@@ -48,7 +48,7 @@ def _build_input(article: Dict[str, Any], template: str) -> str:
     if not fetched:
         fetched = article.get('raw_content', '')
     body = f"Title: {title}\nDate: {date}\nTags: {tags}\nSource: {link}\n\nSource Content (fetched):\n{fetched}"
-    return template + "\n\n" + body
+    return body
 
 
 def _needs_enrichment(doc: Dict[str, Any]) -> bool:
@@ -82,11 +82,14 @@ def _fetch_url_text(url: str) -> str:
 
 
 def _enrich(article: Dict[str, Any], template: str) -> ArticleEnrichment | None:
-    content = _build_input(article, template)
+    user_body = _build_input(article)
     try:
         resp = _OPENAI_CLIENT.responses.parse(
             model=os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
-            input=content,
+            input=[
+                {"role": "system", "content": template},
+                {"role": "user", "content": user_body},
+            ],
             text_format=ArticleEnrichment,
         )
         parsed = getattr(resp, 'output_parsed', None) or (resp.get('output_parsed') if isinstance(resp, dict) else None)
@@ -196,7 +199,7 @@ def run(batch: int = 50):
     request_lines: List[Dict[str, Any]] = []
     for doc in docs:
         custom_id = str(doc.get('_id'))
-        content = _build_input(doc, template)
+        user_body = _build_input(doc)
         request_lines.append(
             {
                 "custom_id": custom_id,
@@ -204,7 +207,10 @@ def run(batch: int = 50):
                 "url": "/v1/chat/completions",
                 "body": {
                     "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
-                    "messages": [{"role": "user", "content": content}],
+                    "messages": [
+                        {"role": "system", "content": template},
+                        {"role": "user", "content": user_body},
+                    ],
                     "response_format": response_format,
                 },
             }

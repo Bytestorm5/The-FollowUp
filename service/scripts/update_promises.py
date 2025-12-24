@@ -134,7 +134,7 @@ def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str,
         article_date = getattr(claim, 'article_date', None)
         article_date_str = str(article_date) if article_date is not None else ''
 
-        content_parts = [tpl.strip(), "", "-- Article Metadata --"]
+        content_parts = ["-- Article Metadata --"]
         content_parts.append(f"Source Article Link: {getattr(claim, 'article_link', '')}")
         content_parts.append(f"Source Article Date: {article_date_str}")
         content_parts.append(f"Claim: {getattr(claim, 'claim', '')}")
@@ -155,6 +155,7 @@ def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str,
             "custom_id": str(custom_id),
             "model": model,
             "input": content,
+            "system": tpl.strip(),
         }
         requests.append(req)
         mapping[str(custom_id)] = (raw, claim, update_type)
@@ -425,7 +426,7 @@ def main():
         custom_id = f"goal:{claim_id}:{idx}"
         article_date = getattr(claim, 'article_date', None)
         article_date_str = str(article_date) if article_date is not None else ''
-        content_parts = [regular_checkin_template.strip(), "", "-- Article Metadata --"]
+        content_parts = ["-- Article Metadata --"]
         content_parts.append(f"Source Article Link: {getattr(claim, 'article_link', '')}")
         content_parts.append(f"Source Article Date: {article_date_str}")
         content_parts.append(f"Claim: {getattr(claim, 'claim', '')}")
@@ -443,6 +444,7 @@ def main():
             "custom_id": str(custom_id),
             "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
             "input": content,
+            "system": regular_checkin_template.strip(),
         }
         goals_lines.append(req)
         goals_map[str(custom_id)] = (raw, claim, None)
@@ -509,7 +511,7 @@ def main():
         article_date_str = str(article_date) if article_date is not None else ''
         event_date = getattr(claim, 'event_date', None)
         event_date_str = str(event_date) if event_date is not None else ''
-        parts = [fact_check_template.strip(), "", "-- Statement Metadata --"]
+        parts = ["-- Statement Metadata --"]
         parts.append(f"Source Article Link: {getattr(claim, 'article_link', '')}")
         parts.append(f"Source Article Date: {article_date_str}")
         parts.append(f"Claim (statement): {getattr(claim, 'claim', '')}")
@@ -527,6 +529,7 @@ def main():
             "custom_id": str(custom_id),
             "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
             "input": content,
+            "system": fact_check_template.strip(),
         }
         stmt_lines.append(req)
         stmt_map[str(custom_id)] = (raw, claim, None)
@@ -589,7 +592,7 @@ def main():
         try:
             followup_id = f.get('_id')
             custom_id = f"followup:{followup_id}:{idx}"
-            content_parts = [endpoint_checkin_template.strip(), "", "-- Followup Metadata --"]
+            content_parts = ["-- Followup Metadata --"]
             content_parts.append(f"Source Article Link: {f.get('article_link', '')}")
             content_parts.append(f"Source Article Date: {str(f.get('article_date', ''))}")
             content_parts.append(f"Claim: {f.get('claim_text', '')}")
@@ -600,6 +603,7 @@ def main():
                 'custom_id': str(custom_id),
                 'model': os.environ.get('OPENAI_MODEL', 'gpt-5-mini'),
                 'input': content,
+                'system': endpoint_checkin_template.strip(),
             }
             request_lines.append(req)
             # Mark mapping entry specially so processing loop knows this is a followup
@@ -652,6 +656,7 @@ def main():
 
         model = req.get('model')
         content_str = req.get('input', '')
+        task_system = req.get('system', '')
         parsed_obj = None
         model_text = ''
         verdict = 'in_progress'
@@ -664,7 +669,7 @@ def main():
                 use_factcheck = False
             schema = FactCheckResponseOutput if use_factcheck else ModelResponseOutput
 
-            run_res = run_with_search(content_str, model=model, text_format=schema)
+            run_res = run_with_search(content_str, model=model, text_format=schema, task_system=task_system)
             model_text = (run_res.text or '').strip()
             parsed_obj = getattr(run_res, 'parsed', None)
             if run_res.sources:
