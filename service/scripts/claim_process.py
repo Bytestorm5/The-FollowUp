@@ -31,6 +31,7 @@ from util import mongo
 from util.slug import generate_unique_slug as _gen_slug
 from util.mongo import normalize_dates as _normalize_dates
 from util import openai_batch as obatch
+from util.schema_outline import compact_outline_from_model
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ def _build_requests(
     schema_json: str,
     template: str,
     model: str,
+    schema_outline: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Build Batch API request lines (JSONL).
 
@@ -90,7 +92,7 @@ def _build_requests(
         content_body = doc.get('clean_markdown') or doc.get('raw_content', 'Unknown Content')
         doc_format = f"""Title: {doc.get('title', 'Unknown Title')}\nTimestamp: {doc.get('date')}\nTags: {','.join(doc.get('tags', []))}\nSource: {doc.get('link', 'Unknown Source')}\n\nContent (Markdown):\n{content_body}"""
         # Build system prompt with static instructions + schema, excluding ARTICLE placeholder
-        sys_full = template.replace('{{SCHEMA}}', schema_json)
+        sys_full = template.replace('{{SCHEMA}}', schema_outline or '')
         split_tok = "\n----\nARTICLE:"
         if split_tok in sys_full:
             sys_prompt = sys_full.split(split_tok, 1)[0].rstrip()
@@ -134,6 +136,7 @@ def _fallback_process_with_responses(
     model: str,
     schema: Dict[str, Any],
     schema_json: str,
+    schema_outline: Optional[str] = None,
 ):
     """Fallback path: process docs one-by-one using Responses.parse with structured output.
 
@@ -151,7 +154,7 @@ def _fallback_process_with_responses(
             content_body = doc.get('clean_markdown') or doc.get('raw_content', 'Unknown Content')
             doc_format = f"""Title: {doc.get('title', 'Unknown Title')}\nTimestamp: {doc.get('date')}\nTags: {','.join(doc.get('tags', []))}\nSource: {doc.get('link', 'Unknown Source')}\n\nContent (Markdown):\n{content_body}"""
             # Build system + user messages instead of concatenated content
-            sys_full = template.replace('{{SCHEMA}}', schema_json)
+            sys_full = template.replace('{{SCHEMA}}', schema_outline or '')
             split_tok = "\n----\nARTICLE:"
             if split_tok in sys_full:
                 sys_prompt = sys_full.split(split_tok, 1)[0].rstrip()
@@ -380,10 +383,11 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
         schema = ClaimProcessingResult.model_json_schema()
     schema = _sanitize_schema_for_strict(schema)
     schema_json = json.dumps(schema, indent=2)
+    schema_outline = compact_outline_from_model(ClaimProcessingResult)
 
     model = os.environ.get('OPENAI_MODEL', 'gpt-5-nano')
     endpoint = '/v1/chat/completions'
-    request_lines = _build_requests(docs, schema, schema_json, template, model=model)
+    request_lines = _build_requests(docs, schema, schema_json, template, model=model, schema_outline=schema_outline)
 
     # Create the OpenAI batch request
     try:
@@ -400,7 +404,7 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
     # Poll until completed
     def _fallback():
         logger.warning('Batch polling timed out; falling back to Responses API for remaining items')
-        _fallback_process_with_responses(docs, template, model, schema, schema_json)
+        _fallback_process_with_responses(docs, template, model, schema, schema_json, schema_outline)
 
     finished = obatch.poll_batch_with_fallback(
         _OPENAI_CLIENT,

@@ -36,6 +36,7 @@ if _SERVICE_ROOT not in sys.path:
     sys.path.insert(0, _SERVICE_ROOT)
 
 from util.scrape_utils import playwright_get
+from util.schema_outline import compact_outline_from_model
 logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 load_dotenv(os.path.join(_SERVICE_ROOT, ".env"))
@@ -375,18 +376,15 @@ def run_with_search(
         if text_format is not None:
             try:
                 try:
-                    schema_str = json.dumps(text_format.model_json_schema())  # type: ignore[attr-defined]
+                    schema_str = compact_outline_from_model(text_format)
                 except Exception:
-                    try:
-                        schema_str = json.dumps(text_format.schema())  # type: ignore[attr-defined]
-                    except Exception:
-                        schema_str = json.dumps({})
+                    schema_str = ""
                 parse_messages = list(messages) + [
                     {
                         "role": "user",
                         "content": (
                             "Return ONLY the requested structured output using the conversation above. "
-                            "Match this schema exactly; do not include prose outside it.\n" + schema_str
+                            "Match this structure and type hints; do not include prose outside it.\n" + schema_str
                         ),
                     }
                 ]
@@ -424,18 +422,15 @@ def run_with_search(
                     # One more structured parse attempt using updated conversation
                     try:
                         try:
-                            schema_str2 = json.dumps(text_format.model_json_schema())  # type: ignore[attr-defined]
+                            schema_str2 = compact_outline_from_model(text_format)
                         except Exception:
-                            try:
-                                schema_str2 = json.dumps(text_format.schema())  # type: ignore[attr-defined]
-                            except Exception:
-                                schema_str2 = json.dumps({})
+                            schema_str2 = ""
                         parse_messages2 = list(messages) + [
                             {
                                 "role": "user",
                                 "content": (
                                     "Return ONLY the requested structured output using the conversation above. "
-                                    "Match this schema exactly; do not include prose outside it.\n" + schema_str2
+                                    "Match this structure and type hints; do not include prose outside it.\n" + schema_str2
                                 ),
                             }
                         ]
