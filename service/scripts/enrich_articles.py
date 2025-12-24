@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 from openai import OpenAI
 from bs4 import BeautifulSoup
+from markitdown import MarkItDown
 
 load_dotenv()
 
@@ -35,19 +36,12 @@ def _load_template() -> str:
         return fh.read()
 
 
-def _build_input(article: Dict[str, Any]) -> str:
+def _build_input(article: Dict[str, Any], markdown: str) -> str:
     title = article.get('title', '')
     date = article.get('date', '')
     link = article.get('link', '')
     tags = ','.join(article.get('tags', []) or [])
-    # Prefer fetching live content from the source link
-    if link.startswith('https://www.state.gov'):
-        fetched = article.get('raw_content', '')
-    else:
-        fetched = _fetch_url_text(link)
-    if not fetched:
-        fetched = article.get('raw_content', '')
-    body = f"Title: {title}\nDate: {date}\nTags: {tags}\nSource: {link}\n\nSource Content (fetched):\n{fetched}"
+    body = f"Title: {title}\nDate: {date}\nTags: {tags}\nSource: {link}\n\nSource Content (markdown):\n{markdown}"
     return body
 
 
@@ -58,6 +52,28 @@ def _needs_enrichment(doc: Dict[str, Any]) -> bool:
 def _fetch_url_text(url: str) -> str:
     if not url:
         return ""
+
+def _fetch_markdown(url: str, fallback_html_text: str = "") -> str:
+    if not url:
+        return fallback_html_text
+    # Try MarkItDown direct URL conversion first
+    try:
+        md = MarkItDown(enable_plugins=False)
+        res = md.convert(url)
+        txt = getattr(res, 'text_content', None)
+        if isinstance(txt, str) and txt.strip():
+            return txt
+    except Exception:
+        pass
+    # Fallback to basic text extraction if conversion fails
+    basic = _fetch_url_text(url)
+    return basic or fallback_html_text
+
+def _get_article_markdown(article: Dict[str, Any]) -> str:
+    link = article.get('link', '')
+    raw = article.get('raw_content', '') or ''
+    md = _fetch_markdown(link, fallback_html_text=raw)
+    return md or raw
     try:
         resp = playwright_get(url, timeout=20)
         html = resp.content.decode("utf-8", errors="ignore")
@@ -82,7 +98,8 @@ def _fetch_url_text(url: str) -> str:
 
 
 def _enrich(article: Dict[str, Any], template: str) -> ArticleEnrichment | None:
-    user_body = _build_input(article)
+    md_text = _get_article_markdown(article)
+    user_body = _build_input(article, md_text)
     try:
         resp = _OPENAI_CLIENT.responses.parse(
             model=os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
@@ -106,6 +123,11 @@ def _enrich(article: Dict[str, Any], template: str) -> ArticleEnrichment | None:
             except Exception:
                 logger.exception('Failed to coerce parsed enrichment for article %s', article.get('_id'))
                 return None
+        # Overwrite LLM-derived clean_markdown with deterministic MarkItDown result
+        try:
+            parsed.clean_markdown = md_text
+        except Exception:
+            pass
         return parsed
     except Exception:
         logger.exception('OpenAI enrichment failed for article %s', article.get('_id'))
@@ -195,11 +217,20 @@ def run(batch: int = 50):
         "json_schema": {"name": "ArticleEnrichment", "schema": schema, "strict": True},
     }
 
+    # Precompute markdown per doc to avoid duplicate fetching and to store deterministically
+    md_by_id: Dict[str, str] = {}
+    for d in docs:
+        try:
+            md_by_id[str(d.get('_id'))] = _get_article_markdown(d)
+        except Exception:
+            md_by_id[str(d.get('_id'))] = d.get('raw_content', '') or ''
+
     # Build batch requests
     request_lines: List[Dict[str, Any]] = []
     for doc in docs:
         custom_id = str(doc.get('_id'))
-        user_body = _build_input(doc)
+        md_text = md_by_id.get(custom_id, '')
+        user_body = _build_input(doc, md_text)
         request_lines.append(
             {
                 "custom_id": custom_id,
@@ -270,7 +301,8 @@ def run(batch: int = 50):
             mongo.bronze_links.update_one(
                 {'_id': docs_by_id[custom_id]['_id']},
                 {'$set': {
-                    'clean_markdown': enr.clean_markdown,
+                    # Overwrite with deterministic markitdown result
+                    'clean_markdown': md_by_id.get(custom_id, enr.clean_markdown),
                     'summary_paragraph': enr.summary_paragraph,
                     'key_takeaways': list(enr.key_takeaways or []),
                     'priority': int(getattr(enr, 'priority', 5)),

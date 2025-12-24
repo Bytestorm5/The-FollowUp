@@ -122,8 +122,12 @@ def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str,
 
         if update_type == UpdateType.ENDPOINT:
             tpl = endpoint_tpl
+            # Use a slightly stronger model for endpoint assessments unless overridden
+            model_for_req = os.environ.get('OPENAI_MODEL_ENDPOINT', os.environ.get('OPENAI_MODEL', 'gpt-5-mini'))
         elif update_type == UpdateType.REGULAR_INTERVAL:
             tpl = regular_tpl
+            # Switch regular check-ins to nano as requested
+            model_for_req = 'gpt-5-nano'
         else:
             logger.info(f'No update needed for claim {raw.get("_id")} ("{claim.completion_condition}"); skipping')
             continue
@@ -153,7 +157,7 @@ def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str,
 
         req = {
             "custom_id": str(custom_id),
-            "model": model,
+            "model": model_for_req,
             "input": content,
             "system": tpl.strip(),
         }
