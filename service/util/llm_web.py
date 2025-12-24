@@ -370,12 +370,25 @@ def run_with_search(
 
         final_text = _extract_response_text(last_response) if last_response is not None else ""
 
-        # If we have text and a schema, do a final parse-only pass to reformat
+        # Always attempt a parse-only pass when a schema is provided
         parsed_obj: Optional[Any] = None
-        if final_text.strip() and text_format is not None:
+        if text_format is not None:
             try:
+                try:
+                    schema_str = json.dumps(text_format.model_json_schema())  # type: ignore[attr-defined]
+                except Exception:
+                    try:
+                        schema_str = json.dumps(text_format.schema())  # type: ignore[attr-defined]
+                    except Exception:
+                        schema_str = json.dumps({})
                 parse_messages = list(messages) + [
-                    {"role": "user", "content": f"Reformat your final answer above into the requested structured output. Only return the structured fields. The following is the schema you must match:\n{json.dumps(text_format.model_json_schema())}"}
+                    {
+                        "role": "user",
+                        "content": (
+                            "Return ONLY the requested structured output using the conversation above. "
+                            "Match this schema exactly; do not include prose outside it.\n" + schema_str
+                        ),
+                    }
                 ]
                 parse_resp = _CLIENT.responses.parse(
                     model=model,
@@ -384,19 +397,70 @@ def run_with_search(
                 )
                 parsed_obj = getattr(parse_resp, "output_parsed", None)
             except Exception:
-                # If parsing fails, we still return the unstructured text
-                logger.exception("Structured parsing failed; returning unstructured text only")
+                logger.exception("Structured parsing failed; will fallback to text if available")
+
+        # Prefer returning parsed structured data when a format is requested
+        if text_format is not None and parsed_obj is not None:
+            return SearchOutput(text=final_text.strip() or "", sources=sources, messages=messages, parsed=parsed_obj)
 
         if final_text.strip():
             if text_format is None:
                 return SearchOutput(text=final_text, sources=sources, messages=messages)
             else:
-                return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=parsed_obj)
+                return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=None)
         else:
+            # Try one finalization step to elicit direct text, then re-parse if needed
+            try:
+                finalize_messages = list(messages) + [
+                    {"role": "user", "content": "Provide the final answer now as text. Do not call tools."}
+                ]
+                finalize_resp = _CLIENT.responses.create(
+                    model=model,
+                    input=finalize_messages,  # type: ignore[arg-type]
+                )
+                messages += getattr(finalize_resp, "output", []) or []
+                final_text2 = _extract_response_text(finalize_resp)
+                if text_format is not None:
+                    # One more structured parse attempt using updated conversation
+                    try:
+                        try:
+                            schema_str2 = json.dumps(text_format.model_json_schema())  # type: ignore[attr-defined]
+                        except Exception:
+                            try:
+                                schema_str2 = json.dumps(text_format.schema())  # type: ignore[attr-defined]
+                            except Exception:
+                                schema_str2 = json.dumps({})
+                        parse_messages2 = list(messages) + [
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Return ONLY the requested structured output using the conversation above. "
+                                    "Match this schema exactly; do not include prose outside it.\n" + schema_str2
+                                ),
+                            }
+                        ]
+                        parse_resp2 = _CLIENT.responses.parse(
+                            model=model,
+                            input=parse_messages2,  # type: ignore[arg-type]
+                            text_format=text_format,  # type: ignore[arg-type]
+                        )
+                        parsed2 = getattr(parse_resp2, "output_parsed", None)
+                        if parsed2 is not None:
+                            return SearchOutput(text=final_text2.strip() or "", sources=sources, messages=messages, parsed=parsed2)
+                    except Exception:
+                        logger.exception("Second structured parsing attempt failed; falling back to text if present")
+                if final_text2.strip():
+                    if text_format is None:
+                        return SearchOutput(text=final_text2, sources=sources, messages=messages)
+                    else:
+                        return SearchOutput(text=final_text2, sources=sources, messages=messages, parsed=None)
+            except Exception:
+                logger.exception("Finalization attempt failed")
+
             if attempt < 3:
                 print(f"Error: empty response text; retrying ({attempt}/3)")
             else:
-                # Final attempt, return whatever we have
+                # Final attempt, return whatever we have (may be empty text and no parsed)
                 if text_format is None:
                     return SearchOutput(text=final_text, sources=sources, messages=messages)
                 else:
