@@ -3,19 +3,44 @@ import Countdown from "@/components/Countdown";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsCollection, getSilverRoundupsCollection, type BronzeLink, type SilverClaim, type SilverFollowup, ObjectId, type SilverRoundupDoc } from "@/lib/mongo";
 import AdsenseAd from "@/components/AdSenseAd";
 
-function pickHeroAndMediums(items: BronzeLink[], maxMediums = 4) {
-  // Sort by priority (1 highest), then date desc, then inserted_at desc
-  const sorted = [...items].sort((a: any, b: any) => {
-    const pa = a.priority ?? 5;
-    const pb = b.priority ?? 5;
-    if (pa !== pb) return pa - pb;
-    const da = new Date(a.date as any).getTime();
-    const db = new Date(b.date as any).getTime();
-    if (db !== da) return db - da;
-    return 0;
+async function pickHeroAndMediumsByHeuristic(items: BronzeLink[], claimsColl: Awaited<ReturnType<typeof getSilverClaimsCollection>>, maxMediums = 6) {
+  if (!items || items.length === 0) return { hero: undefined as any, mediums: [] as BronzeLink[] };
+
+  // Build list of article ids (as strings) and count related claims in one query
+  const idStrings = items
+    .map((a: any) => {
+      const raw = (a as any)._id;
+      try { return raw?.toString?.() ?? String(raw); } catch { return String(raw); }
+    })
+    .filter(Boolean) as string[];
+
+  const claims = await claimsColl
+    .find({ article_id: { $in: idStrings as any[] } })
+    .project({ article_id: 1 })
+    .toArray();
+
+  const claimCountByArticle = new Map<string, number>();
+  for (const c of claims as any[]) {
+    const k = String((c as any).article_id);
+    claimCountByArticle.set(k, (claimCountByArticle.get(k) || 0) + 1);
+  }
+
+  const now = Date.now();
+  const scored = items.map((a: any) => {
+    const idStr = (() => { try { return a?._id?.toString?.() ?? String(a?._id); } catch { return String(a?._id); } })();
+    const kt = Array.isArray(a.key_takeaways) ? a.key_takeaways.length : 0;
+    const cc = claimCountByArticle.get(idStr) || 0;
+    const pri = typeof a.priority === "number" ? a.priority : 5;
+    const d = new Date(a.date as any);
+    const hours = Number.isNaN(d.getTime()) ? 0 : Math.max(0, (now - d.getTime()) / 36e5);
+    const decay = Math.pow(0.4, hours / 24);
+    const score = (kt + cc) * pri * decay;
+    return { a: a as BronzeLink, score };
   });
-  const hero = sorted[0];
-  const mediums = sorted.slice(1, 1 + maxMediums);
+
+  scored.sort((x, y) => y.score - x.score);
+  const hero = scored[0]?.a as BronzeLink | undefined;
+  const mediums = scored.slice(1, 1 + maxMediums).map(s => s.a);
   return { hero, mediums };
 }
 
@@ -43,10 +68,11 @@ export default async function Home() {
     .find({}, { sort: { inserted_at: -1 }, limit: 40 })
     .toArray()) as BronzeLink[];
 
-  const { hero, mediums } = pickHeroAndMediums(pool, 6);
+  // Build compact countdowns (soon finishing) - and reuse claims collection for scoring
+  const claimsColl = await getSilverClaimsCollection();
+  const { hero, mediums } = await pickHeroAndMediumsByHeuristic(pool, claimsColl, 6);
 
   // Build compact countdowns (soon finishing)
-  const claimsColl = await getSilverClaimsCollection();
   const followupsColl = await getSilverFollowupsCollection();
   const claims = (await claimsColl
     .find({ type: { $in: ["promise", "goal"] } })
@@ -115,7 +141,7 @@ export default async function Home() {
                     ) : (
                       <div>
                         <div className="text-foreground/70 text-xs">{r.label}</div>
-                        <Link href={`/roundups/${(r.item as any)._id?.toString?.()}`} className="hover:underline">
+                        <Link href={`/roundups/${(r.item as any).slug || (r.item as any)._id?.toString?.()}`} className="hover:underline">
                           {r.item.title}
                         </Link>
                       </div>
