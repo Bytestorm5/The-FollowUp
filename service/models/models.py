@@ -54,6 +54,7 @@ class MongoArticle(BaseModel):
     
     class Config:
         arbitrary_types_allowed = True
+        extra = 'allow'
 
 class Date_Delta(BaseModel):
     from_date: datetime.date = Field(..., description="Start date")
@@ -203,6 +204,7 @@ class MongoClaim(BaseModel):
     follow_up_worthy: Optional[bool] = Field(None, description="Whether this claim should be queued for follow-up checks.")
     priority: Optional[Priority] = Field(None, description="Operational priority for UI/pipeline.")
     mechanism: Optional[Mechanism] = Field(None, description="Routing hint on how the claim is executed.")
+    lm_log: Optional["LMLogEntry"] = Field(None, description="Log metadata for the LLM call that produced this claim")
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -261,6 +263,7 @@ class SilverUpdate(BaseModel):
     model_output: Union[ModelResponseOutput, FactCheckResponseOutput, dict, str] = Field(..., description="Structured model output or raw text output from the model")
     verdict: str = Field(..., description="Verdict about claim status (supports legacy and detailed categories)")
     created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    lm_log: Optional["LMLogEntry"] = Field(None, description="Log metadata for the LLM call producing this update")
 
     class Config:
         arbitrary_types_allowed = True
@@ -274,9 +277,19 @@ class SilverFollowup(BaseModel):
     article_link: str = Field(..., description="Link to the article")
     model_output: Union[ModelResponseOutput, FactCheckResponseOutput, dict, str] = Field(..., description="Structured model output or raw text output from the model")
     created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    lm_log: Optional["LMLogEntry"] = Field(None, description="Log metadata for the LLM call proposing this follow-up")
     # When processed by the followup pipeline, these fields will be populated
     processed_at: Optional[datetime.datetime] = Field(None, description="When the followup was processed")
     processed_update_id: Optional[Union[ObjectId, str]] = Field(None, description="ID of the SilverUpdate created when processing this followup")
 
     class Config:
         arbitrary_types_allowed = True
+
+class LMLogEntry(BaseModel):
+    api_type: Literal['completions', 'responses'] = Field(..., description="Type of API call made to the language model")
+    call_id: str = Field(..., description="Unique identifier for the API call")
+    called_from: Optional[str] = Field(None, description="Module or function from which the API was called")
+    model_name: str = Field(..., description="Name of the language model used")
+    system_tokens: int = Field(..., description="Number of tokens in the system prompt")
+    user_tokens: int = Field(..., description="Number of tokens in the user prompt")
+    response_tokens: int = Field(..., description="Number of tokens in the model response")

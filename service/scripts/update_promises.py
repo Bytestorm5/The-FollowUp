@@ -669,6 +669,7 @@ def main():
         parsed_obj = None
         model_text = ''
         verdict = 'in_progress'
+        lm_log_obj = None
         try:
             # Choose schema based on custom id (statements use fact check schema)
             schema = FactCheckResponseOutput if is_factcheck else ModelResponseOutput
@@ -676,6 +677,10 @@ def main():
             run_res = run_with_search(content_str, model=model, text_format=schema, task_system=task_system)
             model_text = (run_res.text or '').strip()
             parsed_obj = getattr(run_res, 'parsed', None)
+            try:
+                lm_log_obj = getattr(run_res, 'lm_log', None)
+            except Exception:
+                lm_log_obj = None
             if run_res.sources:
                 try:
                     src_lines = []
@@ -777,6 +782,7 @@ def main():
                 'model_output': model_output_val,
                 'verdict': verdict,
                 'created_at': datetime.datetime.utcnow(),
+                'lm_log': lm_log_obj,
             }
         else:
             doc = {
@@ -788,6 +794,7 @@ def main():
                 'model_output': model_output_val,
                 'verdict': verdict,
                 'created_at': datetime.datetime.utcnow(),
+                'lm_log': lm_log_obj,
             }
 
         if follow_date is not None:
@@ -801,6 +808,7 @@ def main():
                         'article_link': followup_doc.get('article_link', ''),
                         'model_output': model_output_val,
                         'created_at': datetime.datetime.utcnow(),
+                        'lm_log': lm_log_obj,
                     }
                 else:
                     follow_doc = {
@@ -811,6 +819,7 @@ def main():
                         'article_link': getattr(claim, 'article_link', ''),
                         'model_output': model_output_val,
                         'created_at': datetime.datetime.utcnow(),
+                        'lm_log': lm_log_obj,
                     }
                 try:
                     follow_obj = SilverFollowup(**follow_doc)

@@ -36,6 +36,7 @@ if _SERVICE_ROOT not in sys.path:
     sys.path.insert(0, _SERVICE_ROOT)
 
 from util.scrape_utils import playwright_get
+from models import LMLogEntry
 from util.schema_outline import compact_outline_from_model
 logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
@@ -253,6 +254,7 @@ class SearchOutput:
     sources: List[Dict[str, Any]] = field(default_factory=list)
     messages: List[Dict[str, Any]] = field(default_factory=list)
     parsed: Optional[Any] = None
+    lm_log: Optional[LMLogEntry] = None
 def _extract_response_text(response: Any) -> str:
     # New SDK often provides output_text
     try:
@@ -306,6 +308,32 @@ def run_with_search(
     text_format: Optional[Union[type[BaseModel], BaseModel]]  = None,
     task_system: Optional[str] = None,
 ) -> SearchOutput:
+    def _make_log_from_response(resp: Any) -> Optional[LMLogEntry]:
+        try:
+            call_id = getattr(resp, "id", None)
+            usage = getattr(resp, "usage", None)
+            input_tokens = 0
+            output_tokens = 0
+            if usage is not None:
+                try:
+                    input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+                except Exception:
+                    input_tokens = 0
+                try:
+                    output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+                except Exception:
+                    output_tokens = 0
+            return LMLogEntry(
+                api_type='responses',
+                call_id=str(call_id or ""),
+                called_from='util.llm_web.run_with_search',
+                model_name=model,
+                system_tokens=0,
+                user_tokens=input_tokens,
+                response_tokens=output_tokens,
+            )
+        except Exception:
+            return None
     # Up to 3 attempts if the response text is empty
     for attempt in range(1, 4):
         messages: List[Any] = [
@@ -323,6 +351,7 @@ def run_with_search(
         # Guard against infinite loops
         max_turns = 8
         last_response: Any = None
+        primary_log: Optional[LMLogEntry] = None
 
         # Main loop: always run WITHOUT structured parsing so tools can iterate freely
         for _ in range(max_turns):
@@ -332,6 +361,8 @@ def run_with_search(
                 input=messages,  # type: ignore[arg-type]
             )
             last_response = response
+            if primary_log is None:
+                primary_log = _make_log_from_response(response)
 
             # Accumulate output content for the conversation state
             messages += response.output
@@ -394,18 +425,22 @@ def run_with_search(
                     text_format=text_format,  # type: ignore[arg-type]
                 )
                 parsed_obj = getattr(parse_resp, "output_parsed", None)
+                # Prefer a parse call log when parsing succeeds
+                pl = _make_log_from_response(parse_resp)
+                if pl is not None:
+                    primary_log = pl
             except Exception:
                 logger.exception("Structured parsing failed; will fallback to text if available")
 
         # Prefer returning parsed structured data when a format is requested
         if text_format is not None and parsed_obj is not None:
-            return SearchOutput(text=final_text.strip() or "", sources=sources, messages=messages, parsed=parsed_obj)
+            return SearchOutput(text=final_text.strip() or "", sources=sources, messages=messages, parsed=parsed_obj, lm_log=primary_log)
 
         if final_text.strip():
             if text_format is None:
-                return SearchOutput(text=final_text, sources=sources, messages=messages)
+                return SearchOutput(text=final_text, sources=sources, messages=messages, lm_log=primary_log)
             else:
-                return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=None)
+                return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=None, lm_log=primary_log)
         else:
             # Try one finalization step to elicit direct text, then re-parse if needed
             try:
@@ -418,6 +453,10 @@ def run_with_search(
                 )
                 messages += getattr(finalize_resp, "output", []) or []
                 final_text2 = _extract_response_text(finalize_resp)
+                # If finalize produced content, we can update log
+                fl = _make_log_from_response(finalize_resp)
+                if fl is not None:
+                    primary_log = fl
                 if text_format is not None:
                     # One more structured parse attempt using updated conversation
                     try:
@@ -440,15 +479,18 @@ def run_with_search(
                             text_format=text_format,  # type: ignore[arg-type]
                         )
                         parsed2 = getattr(parse_resp2, "output_parsed", None)
+                        pl2 = _make_log_from_response(parse_resp2)
+                        if pl2 is not None:
+                            primary_log = pl2
                         if parsed2 is not None:
-                            return SearchOutput(text=final_text2.strip() or "", sources=sources, messages=messages, parsed=parsed2)
+                            return SearchOutput(text=final_text2.strip() or "", sources=sources, messages=messages, parsed=parsed2, lm_log=primary_log)
                     except Exception:
                         logger.exception("Second structured parsing attempt failed; falling back to text if present")
                 if final_text2.strip():
                     if text_format is None:
-                        return SearchOutput(text=final_text2, sources=sources, messages=messages)
+                        return SearchOutput(text=final_text2, sources=sources, messages=messages, lm_log=primary_log)
                     else:
-                        return SearchOutput(text=final_text2, sources=sources, messages=messages, parsed=None)
+                        return SearchOutput(text=final_text2, sources=sources, messages=messages, parsed=None, lm_log=primary_log)
             except Exception:
                 logger.exception("Finalization attempt failed")
 
@@ -457,12 +499,12 @@ def run_with_search(
             else:
                 # Final attempt, return whatever we have (may be empty text and no parsed)
                 if text_format is None:
-                    return SearchOutput(text=final_text, sources=sources, messages=messages)
+                    return SearchOutput(text=final_text, sources=sources, messages=messages, lm_log=primary_log)
                 else:
-                    return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=None)
+                    return SearchOutput(text=final_text, sources=sources, messages=messages, parsed=None, lm_log=primary_log)
 
     # Fallback return to satisfy type checkers; should be unreachable
-    return SearchOutput(text="", sources=[], messages=[])
+    return SearchOutput(text="", sources=[], messages=[], lm_log=None)
 
 if __name__ == "__main__":
     class Test(BaseModel):

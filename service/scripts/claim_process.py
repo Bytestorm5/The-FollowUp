@@ -26,7 +26,7 @@ _REPO_ROOT = os.path.abspath(os.path.join(_HERE, '..'))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from models import ClaimProcessingResult, Date_Delta, MongoClaim
+from models import ClaimProcessingResult, Date_Delta, MongoClaim, LMLogEntry
 from util import mongo
 from util.slug import generate_unique_slug as _gen_slug
 from util.mongo import normalize_dates as _normalize_dates
@@ -165,6 +165,7 @@ def _fallback_process_with_responses(
             # Use Responses API with structured parsing to ClaimProcessingResult
             max_retries = 3
             parsed = None
+            lm_dict: Optional[dict] = None
             for attempt in range(1, max_retries + 1):
                 try:
                     resp = _OPENAI_CLIENT.responses.parse(
@@ -178,6 +179,33 @@ def _fallback_process_with_responses(
                     parsed = getattr(resp, 'output_parsed', None) or (
                         resp.get('output_parsed') if isinstance(resp, dict) else None
                     )
+                    # Build LM log entry for this call
+                    try:
+                        call_id = getattr(resp, 'id', None) or (resp.get('id') if isinstance(resp, dict) else None)
+                        usage = getattr(resp, 'usage', None) or (resp.get('usage') if isinstance(resp, dict) else None)
+                        input_tokens = 0
+                        output_tokens = 0
+                        if usage is not None:
+                            try:
+                                input_tokens = int(getattr(usage, 'input_tokens', None) or usage.get('input_tokens') or usage.get('prompt_tokens') or 0)
+                            except Exception:
+                                input_tokens = 0
+                            try:
+                                output_tokens = int(getattr(usage, 'output_tokens', None) or usage.get('output_tokens') or usage.get('completion_tokens') or 0)
+                            except Exception:
+                                output_tokens = 0
+                        lm = LMLogEntry(
+                            api_type='responses',
+                            call_id=str(call_id or ''),
+                            called_from='scripts.claim_process.responses_fallback',
+                            model_name=model,
+                            system_tokens=0,
+                            user_tokens=input_tokens,
+                            response_tokens=output_tokens,
+                        )
+                        lm_dict = lm.model_dump() if hasattr(lm, 'model_dump') else lm.dict()
+                    except Exception:
+                        lm_dict = None
                     if parsed is None:
                         raise ValueError('No parsed output received from responses API')
 
@@ -236,6 +264,8 @@ def _fallback_process_with_responses(
                     continue
 
                 final_doc = _pydantic_dump(mongo_claim)
+                if lm_dict is not None:
+                    final_doc['lm_log'] = lm_dict
                 try:
                     final_doc = _normalize_dates(final_doc)
                 except Exception:
@@ -459,6 +489,26 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
             response = (rec.get('response') or {})
             status_code = response.get('status_code')
             body = response.get('body') or {}
+            # Prepare LM log entry from chat completions response
+            lm_dict: Optional[dict] = None
+            try:
+                call_id = body.get('id')
+                usage = body.get('usage') or {}
+                prompt_tokens = int(usage.get('prompt_tokens') or 0)
+                completion_tokens = int(usage.get('completion_tokens') or 0)
+                model_name = body.get('model') or os.environ.get('OPENAI_MODEL', 'gpt-5-nano')
+                lm = LMLogEntry(
+                    api_type='completions',
+                    call_id=str(call_id or ''),
+                    called_from='scripts.claim_process.batch',
+                    model_name=str(model_name),
+                    system_tokens=0,
+                    user_tokens=prompt_tokens,
+                    response_tokens=completion_tokens,
+                )
+                lm_dict = lm.model_dump() if hasattr(lm, 'model_dump') else lm.dict()
+            except Exception:
+                lm_dict = None
             if status_code != 200:
                 logger.error(f'Non-200 status for custom_id={article_id}: status={status_code} body={body}')
                 continue
@@ -517,6 +567,8 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
 
                 # Convert to plain dict and normalize dates before inserting
                 final_doc = _pydantic_dump(mongo_claim)
+                if lm_dict is not None:
+                    final_doc['lm_log'] = lm_dict
                 final_doc = _normalize_dates(final_doc)
                 try:
                     claims_coll.insert_one(final_doc)

@@ -17,7 +17,7 @@ if _SERVICE_ROOT not in sys.path:
     sys.path.insert(0, _SERVICE_ROOT)
 
 from util import mongo
-from models import ArticleEnrichment, MongoArticle
+from models import ArticleEnrichment, MongoArticle, LMLogEntry
 from util import openai_batch as obatch
 from util.scrape_utils import playwright_get
 from util import locks as _locks
@@ -97,7 +97,7 @@ def _get_article_markdown(article: Dict[str, Any]) -> str:
         return ""
 
 
-def _enrich(article: Dict[str, Any], template: str) -> ArticleEnrichment | None:
+def _enrich(article: Dict[str, Any], template: str) -> tuple[ArticleEnrichment | None, dict | None]:
     md_text = _get_article_markdown(article)
     user_body = _build_input(article, md_text)
     try:
@@ -112,7 +112,7 @@ def _enrich(article: Dict[str, Any], template: str) -> ArticleEnrichment | None:
         parsed = getattr(resp, 'output_parsed', None) or (resp.get('output_parsed') if isinstance(resp, dict) else None)
         if parsed is None:
             logger.error('No parsed output while enriching article %s', article.get('_id'))
-            return None
+            return None, None
         if not isinstance(parsed, ArticleEnrichment):
             # pydantic v1 compatibility: attempt coercion
             try:
@@ -122,22 +122,49 @@ def _enrich(article: Dict[str, Any], template: str) -> ArticleEnrichment | None:
                     parsed = ArticleEnrichment.parse_obj(parsed)  # type: ignore[attr-defined]
             except Exception:
                 logger.exception('Failed to coerce parsed enrichment for article %s', article.get('_id'))
-                return None
+                return None, None
         # Overwrite LLM-derived clean_markdown with deterministic MarkItDown result
         try:
             parsed.clean_markdown = md_text
         except Exception:
             pass
-        return parsed
+        # Build LM log entry
+        try:
+            call_id = getattr(resp, 'id', None) or (resp.get('id') if isinstance(resp, dict) else None)
+            usage = getattr(resp, 'usage', None) or (resp.get('usage') if isinstance(resp, dict) else None)
+            prompt_tokens = 0
+            completion_tokens = 0
+            if usage is not None:
+                try:
+                    prompt_tokens = int(getattr(usage, 'input_tokens', None) or usage.get('prompt_tokens') or 0)
+                except Exception:
+                    prompt_tokens = 0
+                try:
+                    completion_tokens = int(getattr(usage, 'output_tokens', None) or usage.get('completion_tokens') or 0)
+                except Exception:
+                    completion_tokens = 0
+            lm = LMLogEntry(
+                api_type='responses',
+                call_id=str(call_id or ''),
+                called_from='scripts.enrich_articles._enrich',
+                model_name=os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
+                system_tokens=0,
+                user_tokens=prompt_tokens,
+                response_tokens=completion_tokens,
+            )
+            lm_dict = lm.model_dump() if hasattr(lm, 'model_dump') else lm.dict()
+        except Exception:
+            lm_dict = None
+        return parsed, lm_dict
     except Exception:
         logger.exception('OpenAI enrichment failed for article %s', article.get('_id'))
-        return None
+        return None, None
 
 
 def _fallback_enrich(docs: list[Dict[str, Any]], template: str) -> None:
     for art in docs:
         try:
-            enr = _enrich(art, template)
+            enr, lm_dict = _enrich(art, template)
             if enr is None:
                 continue
             update = {
@@ -146,6 +173,7 @@ def _fallback_enrich(docs: list[Dict[str, Any]], template: str) -> None:
                     'summary_paragraph': enr.summary_paragraph,
                     'key_takeaways': list(enr.key_takeaways or []),
                     'priority': int(getattr(enr, 'priority', 5)),
+                    'enrichment_lm_log': lm_dict,
                 }
             }
             mongo.bronze_links.update_one({'_id': art.get('_id')}, update)
@@ -298,6 +326,25 @@ def run(batch: int = 50):
                 enr = ArticleEnrichment.model_validate(data)  # type: ignore[attr-defined]
             else:
                 enr = ArticleEnrichment.parse_obj(data)  # type: ignore[attr-defined]
+            # Build LM log from chat completions body
+            try:
+                call_id = body.get('id')
+                usage = body.get('usage') or {}
+                prompt_tokens = int(usage.get('prompt_tokens') or 0)
+                completion_tokens = int(usage.get('completion_tokens') or 0)
+                model_name = body.get('model') or os.environ.get('OPENAI_MODEL', 'gpt-5-nano')
+                lm = LMLogEntry(
+                    api_type='completions',
+                    call_id=str(call_id or ''),
+                    called_from='scripts.enrich_articles.batch',
+                    model_name=str(model_name),
+                    system_tokens=0,
+                    user_tokens=prompt_tokens,
+                    response_tokens=completion_tokens,
+                )
+                lm_dict = lm.model_dump() if hasattr(lm, 'model_dump') else lm.dict()
+            except Exception:
+                lm_dict = None
             mongo.bronze_links.update_one(
                 {'_id': docs_by_id[custom_id]['_id']},
                 {'$set': {
@@ -306,6 +353,7 @@ def run(batch: int = 50):
                     'summary_paragraph': enr.summary_paragraph,
                     'key_takeaways': list(enr.key_takeaways or []),
                     'priority': int(getattr(enr, 'priority', 5)),
+                    'enrichment_lm_log': lm_dict,
                 }, '$unset': {'enrich_lock': ""}}
             )
             updated += 1
