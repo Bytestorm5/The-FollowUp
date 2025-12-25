@@ -6,7 +6,7 @@ export function getSiteUrl(): string {
       return u.origin;
     }
   } catch {}
-  return "https://thefollowup.example";
+  return "https://thefollowup.ai";
 }
 
 export function absUrl(path: string): string {
