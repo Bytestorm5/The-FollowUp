@@ -102,9 +102,9 @@ export default async function Home() {
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       <div className="mx-auto max-w-7xl px-4 py-6">
-        <div className="grid gap-6 lg:grid-cols-5">
+        <div className="grid gap-6 lg:grid-cols-9">
           {/* Left sidebar: Roundups */}
-          <aside className="space-y-4 hidden lg:block">
+          <aside className="space-y-4 hidden lg:block lg:col-span-2">
             <div className="rounded-md border border-[var(--color-border)] p-3">
               <div className="mb-2 text-sm font-semibold" style={{ fontFamily: "var(--font-serif)" }}>Roundups</div>
               <ul className="space-y-2 text-sm">
@@ -131,7 +131,7 @@ export default async function Home() {
           </aside>
 
           {/* Main content (hero + mediums) */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-5">
             {/* Hero article */}
             {hero && (
               <article className="card border border-[var(--color-border)] p-4">
@@ -191,7 +191,7 @@ export default async function Home() {
           </div>
 
           {/* Right Sidebar: compact countdowns + ad slot */}
-          <aside className="space-y-4">
+          <aside className="space-y-4 lg:col-span-2">
             <div className="rounded-md border border-[var(--color-border)] p-3">
               <div className="mb-2 text-sm font-semibold" style={{ fontFamily: "var(--font-serif)" }}>Countdowns</div>
               {countdowns.length === 0 ? (
