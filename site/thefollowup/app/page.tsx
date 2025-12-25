@@ -30,7 +30,8 @@ async function pickHeroAndMediumsByHeuristic(items: BronzeLink[], claimsColl: Aw
     const idStr = (() => { try { return a?._id?.toString?.() ?? String(a?._id); } catch { return String(a?._id); } })();
     const kt = Array.isArray(a.key_takeaways) ? a.key_takeaways.length : 0;
     const cc = claimCountByArticle.get(idStr) || 0;
-    const pri = typeof a.priority === "number" ? a.priority : 5;
+    let pri = typeof a.priority === "number" ? a.priority : 5;
+    pri = (5 - pri) + 1
     const d = new Date(a.date as any);
     const hours = Number.isNaN(d.getTime()) ? 0 : Math.max(0, (now - d.getTime()) / 36e5);
     const decay = Math.pow(0.4, hours / 24);
