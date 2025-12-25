@@ -3,9 +3,11 @@ import {
   getBronzeCollection,
   getSilverClaimsCollection,
   getSilverUpdatesCollection,
+  getSilverRoundupsCollection,
   type BronzeLink,
   type SilverClaim,
   type SilverUpdate,
+  type SilverRoundupDoc,
   ObjectId,
 } from "@/lib/mongo";
 import { searchClaimIdsByText } from "@/lib/search";
@@ -72,6 +74,41 @@ export default async function SearchPage({
     ])
     .toArray()) as (BronzeLink & { score?: number })[];
 
+  // Fetch roundup results via Atlas Search (title + body)
+  const roundupsColl = await getSilverRoundupsCollection();
+  let roundups: (SilverRoundupDoc & { score?: number })[] = [];
+  try {
+    roundups = (await roundupsColl
+      .aggregate< SilverRoundupDoc & { score?: number } >([
+        {
+          $search: {
+            index: indexName,
+            text: {
+              query: q,
+              path: ["title", "summary_markdown"],
+              fuzzy: {},
+              matchCriteria: "any",
+            },
+          },
+        },
+        { $project: { title: 1, period_start: 1, period_end: 1, slug: 1, roundup_type: 1, score: { $meta: "searchScore" } } },
+        { $sort: { score: -1, period_end: -1 } },
+        { $limit: 10 },
+      ])
+      .toArray()) as any;
+  } catch {
+    // Fallback regex search if Atlas Search index missing
+    roundups = (await roundupsColl
+      .find({ $or: [
+        { title: { $regex: q, $options: "i" } },
+        { summary_markdown: { $regex: q, $options: "i" } },
+      ] })
+      .project({ title: 1, period_start: 1, period_end: 1, slug: 1, roundup_type: 1 })
+      .sort({ period_end: -1 })
+      .limit(10)
+      .toArray()) as any;
+  }
+
   // Collect claim IDs by searching claims and updates
   const claimIdSet = await searchClaimIdsByText(q);
   let claimIds: (string | ObjectId)[] = Array.from(claimIdSet);
@@ -137,26 +174,50 @@ export default async function SearchPage({
         </form>
 
         <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-          {/* Articles column */}
+          {/* Articles + Roundups column */}
           <div>
-            <div className="dateline mb-1">Articles</div>
-            {articles.length === 0 ? (
-              <p className="text-foreground/70 text-sm">No articles found.</p>
-            ) : (
-              <ul className="space-y-4">
-                {articles.map((a) => (
-                  <li key={String((a as any)._id)} className="card border border-[var(--color-border)] p-4">
-                    <Link href={`/article/${String((a as any)._id)}`} className="text-lg font-semibold hover:underline" style={{ fontFamily: "var(--font-serif)" }}>
-                      {a.title}
-                    </Link>
-                    {a.summary_paragraph && (
-                      <div className="mt-1 text-sm text-foreground/80 line-clamp-3">{a.summary_paragraph}</div>
-                    )}
-                    <div className="mt-2 text-xs text-foreground/60">{new Date(a.date as any).toLocaleDateString()}</div>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="dateline mb-1">Articles & Roundups</div>
+            {(() => {
+              // Merge and sort by score desc, then recency
+              const merged = [
+                ...articles.map((a) => ({ kind: "article" as const, score: (a as any).score ?? 0, when: new Date((a as any).date as any).getTime() || 0, a })),
+                ...roundups.map((r) => ({ kind: "roundup" as const, score: (r as any).score ?? 0, when: new Date((r as any).period_end as any).getTime() || 0, r })),
+              ].sort((x, y) => (y.score - x.score) || (y.when - x.when)).slice(0, 20);
+
+              if (merged.length === 0) {
+                return <p className="text-foreground/70 text-sm">No results found.</p>;
+              }
+              return (
+                <ul className="space-y-4">
+                  {merged.map((m, i) => {
+                    if (m.kind === "article") {
+                      const a = m.a as any;
+                      return (
+                        <li key={`a-${String(a._id)}`} className="card border border-[var(--color-border)] p-4">
+                          <Link href={`/article/${a.slug || String(a._id)}`} className="text-lg font-semibold hover:underline" style={{ fontFamily: "var(--font-serif)" }}>
+                            {a.title}
+                          </Link>
+                          {a.summary_paragraph && (
+                            <div className="mt-1 text-sm text-foreground/80 line-clamp-3">{a.summary_paragraph}</div>
+                          )}
+                          <div className="mt-2 text-xs text-foreground/60">{new Date(a.date as any).toLocaleDateString()}</div>
+                        </li>
+                      );
+                    }
+                    const r = (m as any).r as SilverRoundupDoc;
+                    return (
+                      <li key={`r-${String((r as any)._id)}`} className="card border border-[var(--color-border)] p-4">
+                        <div className="mb-1 text-xs text-foreground/70">Roundup • {String((r as any).roundup_type).toUpperCase()}</div>
+                        <Link href={`/roundups/${(r as any).slug || String((r as any)._id)}`} className="text-lg font-semibold hover:underline" style={{ fontFamily: "var(--font-serif)" }}>
+                          {r.title}
+                        </Link>
+                        <div className="mt-2 text-xs text-foreground/60">{new Date(r.period_start as any).toLocaleDateString()} – {new Date(r.period_end as any).toLocaleDateString()}</div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              );
+            })()}
           </div>
 
           {/* Claims column */}
