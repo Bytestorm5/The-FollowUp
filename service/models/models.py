@@ -293,3 +293,42 @@ class LMLogEntry(BaseModel):
     system_tokens: int = Field(..., description="Number of tokens in the system prompt")
     user_tokens: int = Field(..., description="Number of tokens in the user prompt")
     response_tokens: int = Field(..., description="Number of tokens in the model response")
+
+
+RoundupKind = Literal["daily", "weekly", "monthly", "yearly"]
+
+
+class RoundupSeedArticle(BaseModel):
+    article_id: Union[ObjectId, str] = Field(...)
+    title: str = Field(...)
+    link: Optional[str] = Field(None)
+    score: int = Field(..., description="Heuristic score used to select this article")
+    key_takeaways: Optional[List[str]] = Field(None)
+    claims: Optional[List[str]] = Field(None, description="Claim texts that reference this article")
+    
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class RoundupResponseOutput(BaseModel):
+    title: str = Field(..., description="Title for the roundup")
+    text: str = Field(..., description="Markdown-formatted roundup body")
+    sources: Optional[List[str]] = Field(None, description="Optional list of source URLs referenced")
+
+
+class SilverRoundup(BaseModel):
+    roundup_type: RoundupKind = Field(...)
+    slug: Optional[str] = Field(None, description="URL-friendly unique slug for the roundup")
+    period_start: datetime.date = Field(...)
+    period_end: datetime.date = Field(...)
+    title: str = Field(...)
+    summary_markdown: str = Field(...)
+    sources: Optional[List[str]] = Field(None, description="List of source URLs referenced by the roundup")
+    seed_articles: List[RoundupSeedArticle] = Field(default_factory=list)
+    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    lm_log: Optional[LMLogEntry] = Field(None)
+
+    class Config:
+        arbitrary_types_allowed = True
+    
+    

@@ -125,6 +125,35 @@ export async function getSilverUpdatesCollection(): Promise<Collection<SilverUpd
   return db.collection<SilverUpdate>("silver_updates");
 }
 
+export type RoundupKind = "daily" | "weekly" | "monthly" | "yearly";
+
+export interface RoundupSeedArticle {
+  article_id: string | ObjectId;
+  title: string;
+  link?: string | null;
+  score: number;
+  key_takeaways?: string[] | null;
+  claims?: string[] | null;
+}
+
+export interface SilverRoundupDoc {
+  _id?: ObjectId;
+  roundup_type: RoundupKind;
+  slug?: string;
+  period_start: Date | string;
+  period_end: Date | string;
+  title: string;
+  summary_markdown: string;
+  sources?: string[] | null;
+  seed_articles?: RoundupSeedArticle[];
+  created_at?: Date | string;
+}
+
+export async function getSilverRoundupsCollection(): Promise<Collection<SilverRoundupDoc>> {
+  const db = await getDb();
+  return db.collection<SilverRoundupDoc>("silver_roundups");
+}
+
 export interface SilverLog {
   _id?: ObjectId;
   run_started_at: Date | string;

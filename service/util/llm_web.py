@@ -44,6 +44,18 @@ import openai
 _CLIENT = openai.OpenAI()
 
  
+SEARCH_BLACKLIST = [
+    "grokipedia.com",
+    "nypost.com",
+    "washingtontimes.com"
+]
+
+def _query_preprocess(query: str) -> str:
+    """Preprocess query to avoid blacklisted domains."""
+    q = query
+    for domain in SEARCH_BLACKLIST:
+        q += f' -site:{domain}'
+    return q
 
 def _extract_ddg_href(href: str, base: str) -> Optional[str]:
     if not href:
@@ -333,11 +345,11 @@ def _handle_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     if name == "ddg_web_search":
         q = str(arguments.get("query", "")).strip()
         k = int(arguments.get("max_results", 5) or 5)
-        return {"results": _ddg_search(q, max_results=k)}
+        return {"results": _ddg_search(_query_preprocess(q), max_results=k)}
     if name == "ddg_news_search":
         q = str(arguments.get("query", "")).strip()
         k = int(arguments.get("max_results", 5) or 5)
-        return {"results": _ddg_news_search(q, max_results=k)}
+        return {"results": _ddg_news_search(_query_preprocess(q), max_results=k)}
     if name == "fetch_url":
         url = str(arguments.get("url", ""))
         max_chars = int(arguments.get("max_chars", 50000) or 50000)
@@ -438,7 +450,7 @@ def _tool_defs(choices: Optional[ToolChoices] = None):
                     "max_articles": {"type": ["integer", "null"], "minimum": 1, "maximum": 50, "default": 10},
                     "max_claims": {"type": ["integer", "null"], "minimum": 1, "maximum": 100, "default": 20},
                 },
-                "required": ["query"],
+                "required": ["query", "max_articles", "max_claims"],
                 "additionalProperties": False,
             },
         })
@@ -497,6 +509,10 @@ You are an expert news analyst and researcher.
 The system will give a well-defined task. Use your available tools to complete the task as described.
 This task is automatic: do not ask clarifying questions, engage in further discussion, or prompt the system for more information.
 Provide a comprehensive report that fully meets the instructions. Do not include suggestions for next steps or use conversational language.
+For tools prefixed with "ddg_", you have the ability to use modifiers on your query strings:
+- You can exclude specific websites by appending ' -site:example.com' to your query.
+- You can specify exact phrases by enclosing them in double quotes. (Ex. climate change "botswana")
+- You can specify "filetype:..." to filter results by file type. (Ex. filetype:pdf)
 """
 
 def run_with_search(

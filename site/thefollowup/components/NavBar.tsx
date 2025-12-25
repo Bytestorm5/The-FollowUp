@@ -13,7 +13,7 @@ export default function NavBar() {
 
   return (
     <header className="fixed inset-x-0 top-0 z-50">
-      <div className="mx-auto max-w-5xl px-4">
+      <div className="mx-auto max-w-6xl px-4">
         {/* Mobile bar */}
         <div className="mt-3 flex h-12 items-center justify-between rounded-full bg-background/80 px-4 ring-1 ring-black/[.06] backdrop-blur lg:hidden">
           <button aria-label="Open menu" aria-expanded={open} aria-controls="mobile-drawer" onClick={() => setOpen(true)} className="flex flex-col gap-1">
@@ -31,7 +31,7 @@ export default function NavBar() {
         {/* Desktop nav */}
         <nav
           aria-label="Primary"
-          className="fade-border-b mx-auto mt-4 hidden h-14 w-full max-w-2xl items-center justify-center gap-8 rounded-full bg-background/80 px-8 shadow-sm ring-1 ring-black/[.06] backdrop-blur lg:flex"
+          className="fade-border-b mx-auto mt-4 hidden h-14 w-full max-w-3xl items-center justify-center gap-8 rounded-full bg-background/80 px-8 shadow-sm ring-1 ring-black/[.06] backdrop-blur lg:flex"
         >
           <Link href="/" className="flex items-center gap-2">
             <div className="h-6 w-6 rounded-full bg-primary/90" />
@@ -42,6 +42,7 @@ export default function NavBar() {
 
           <Link href="/feed" className="text-sm font-medium text-foreground hover:opacity-80">Feed</Link>
           <Link href="/fact_checks" className="text-sm font-medium text-foreground hover:opacity-80">Fact Checks</Link>
+          <Link href="/roundups" className="text-sm font-medium text-foreground hover:opacity-80">Roundups</Link>
           <div className="relative inline-block group">
             <Link href="/countdowns" className="text-sm font-medium text-foreground hover:opacity-80">Countdowns</Link>
             <div className="invisible absolute left-1/2 top-full z-50 w-44 -translate-x-1/2 rounded-md border border-[var(--color-border)] bg-background p-1 text-sm opacity-0 shadow-md transition group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto">
@@ -87,6 +88,7 @@ export default function NavBar() {
         <nav className="flex flex-col gap-2 text-sm">
           <Link href="/feed" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Feed</Link>
           <Link href="/fact_checks" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Fact Checks</Link>
+          <Link href="/roundups" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Roundups</Link>
           <Link href="/search" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Search</Link>
           <div className="mt-2 font-semibold text-foreground/80">Countdowns</div>
           <Link href="/countdowns" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Active Countdowns</Link>

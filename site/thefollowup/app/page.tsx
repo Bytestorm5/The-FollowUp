@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Countdown from "@/components/Countdown";
-import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsCollection, type BronzeLink, type SilverClaim, type SilverFollowup, ObjectId } from "@/lib/mongo";
+import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsCollection, getSilverRoundupsCollection, type BronzeLink, type SilverClaim, type SilverFollowup, ObjectId, type SilverRoundupDoc } from "@/lib/mongo";
 import AdsenseAd from "@/components/AdSenseAd";
 
 function pickHeroAndMediums(items: BronzeLink[], maxMediums = 4) {
@@ -85,12 +85,53 @@ export default async function Home() {
     .sort((a, b) => new Date(a.dueISO).getTime() - new Date(b.dueISO).getTime())
     .slice(0, 6);
 
+  // Left sidebar: latest roundups (daily, weekly, monthly, yearly)
+  const rcoll = await getSilverRoundupsCollection();
+  const latestDaily = await rcoll.find({ roundup_type: "daily" }).sort({ period_end: -1 }).limit(1).toArray() as SilverRoundupDoc[];
+  const latestWeekly = await rcoll.find({ roundup_type: "weekly" }).sort({ period_end: -1 }).limit(1).toArray() as SilverRoundupDoc[];
+  const latestMonthly = await rcoll.find({ roundup_type: "monthly" }).sort({ period_end: -1 }).limit(1).toArray() as SilverRoundupDoc[];
+  const latestYearly = await rcoll.find({ roundup_type: "yearly" }).sort({ period_end: -1 }).limit(1).toArray() as SilverRoundupDoc[];
+
+  const leftRoundups: Array<{ label: string; item: SilverRoundupDoc | null }> = [
+    { label: "Daily", item: latestDaily[0] || null },
+    { label: "Weekly", item: latestWeekly[0] || null },
+    { label: "Monthly", item: latestMonthly[0] || null },
+    { label: "Yearly", item: latestYearly[0] || null },
+  ];
+
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
-      <div className="mx-auto max-w-6xl px-4 py-6">
-        <div className="grid gap-6 lg:grid-cols-3">
+      <div className="mx-auto max-w-7xl px-4 py-6">
+        <div className="grid gap-6 lg:grid-cols-5">
+          {/* Left sidebar: Roundups */}
+          <aside className="space-y-4 hidden lg:block">
+            <div className="rounded-md border border-[var(--color-border)] p-3">
+              <div className="mb-2 text-sm font-semibold" style={{ fontFamily: "var(--font-serif)" }}>Roundups</div>
+              <ul className="space-y-2 text-sm">
+                {leftRoundups.map((r, idx) => (
+                  <li key={idx} className="border-b border-[var(--color-border)] pb-2 last:border-b-0 last:pb-0">
+                    {!r.item ? (
+                      <div className="text-foreground/60">{r.label}: Not available</div>
+                    ) : (
+                      <div>
+                        <div className="text-foreground/70 text-xs">{r.label}</div>
+                        <Link href={`/roundups/${(r.item as any)._id?.toString?.()}`} className="hover:underline">
+                          {r.item.title}
+                        </Link>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {/* Left sidebar ad slot */}
+            <div className="rounded-md border border-dashed border-[var(--color-border)] p-6 text-center text-xs text-foreground/60">
+              <AdsenseAd adSlot="3876912311"></AdsenseAd>
+            </div>
+          </aside>
+
           {/* Main content (hero + mediums) */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-3">
             {/* Hero article */}
             {hero && (
               <article className="card border border-[var(--color-border)] p-4">
@@ -149,7 +190,7 @@ export default async function Home() {
             </div>
           </div>
 
-          {/* Sidebar: compact countdowns + ad slot */}
+          {/* Right Sidebar: compact countdowns + ad slot */}
           <aside className="space-y-4">
             <div className="rounded-md border border-[var(--color-border)] p-3">
               <div className="mb-2 text-sm font-semibold" style={{ fontFamily: "var(--font-serif)" }}>Countdowns</div>

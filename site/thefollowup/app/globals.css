@@ -112,3 +112,49 @@ h1, h2, h3, h4 {
   background-color: var(--color-status-failed);
   border-color: var(--color-status-failed);
 }
+
+/* Markdown content defaults */
+.markdown {
+  color: var(--color-foreground);
+  line-height: 1.8; /* more relaxed line height for readability */
+}
+.markdown p {
+  margin-top: 0.75rem;
+  margin-bottom: 1.25rem; /* further increase spacing between paragraphs/newlines */
+}
+.markdown h1 {
+  font-family: var(--font-serif);
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 1.5rem; /* smaller than page title, bigger than body */
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+.markdown h2 {
+  font-family: var(--font-serif);
+  color: var(--color-primary);
+  font-weight: 600; /* tone down level-2 headings */
+  font-size: 1.2rem;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+.markdown h3 {
+  font-family: var(--font-serif);
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 1.125rem;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+.markdown ul, .markdown ol {
+  padding-left: 1.25rem;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+.markdown li {
+  margin: 0.25rem 0;
+}
+.markdown a {
+  color: var(--color-primary);
+  text-decoration: underline;
+}

@@ -63,6 +63,7 @@ def main() -> int:
         scripts_dir / "enrich_articles.py",
         scripts_dir / "claim_process.py",
         scripts_dir / "update_promises.py",
+        scripts_dir / "generate_roundups.py",
     ]
 
     python = sys.executable or "python"

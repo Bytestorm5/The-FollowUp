@@ -17,10 +17,12 @@ silver_updates = DB.get_collection("silver_updates")
 
 
 def normalize_dates(obj: object) -> object:
-	"""Recursively convert date/datetime/Date_Delta objects to ISO 8601 strings.
+	"""Recursively ensure date/datetime/Date_Delta objects have tzinfo.
 
-	Mirrors the helper used in `claim_process.py`, centralized here so all
-	Mongo insertion code can reuse a consistent serializer.
+	Instead of serializing to strings, attach tzinfo (default EST, UTC-05:00)
+	to naive datetime values. For date values, convert to a midnight datetime
+	with EST tzinfo. If tzinfo is already present on a datetime, leave as-is.
+	Other object types pass through unchanged.
 	"""
 	try:
 		import datetime as _dt
@@ -29,13 +31,20 @@ def normalize_dates(obj: object) -> object:
 		# If imports fail for some reason, fall back to returning the object.
 		return obj
 
+	# Fixed-offset EST timezone (UTC-05:00). Intentionally not DST-aware.
+	_EST_TZ = _dt.timezone(_dt.timedelta(hours=-5), name="EST")
+
 	def _norm(o: object):
 		if o is None:
 			return None
+		# Handle datetime first (subclass of date)
 		if isinstance(o, _dt.datetime):
-			return o.isoformat()
+			if o.tzinfo is None:
+				return o.replace(tzinfo=_EST_TZ)
+			return o
+		# For plain dates, convert to midnight datetime with EST tzinfo
 		if isinstance(o, _dt.date):
-			return o.isoformat()
+			return _dt.datetime(o.year, o.month, o.day, tzinfo=_EST_TZ)
 		if isinstance(o, Date_Delta):
 			return _norm(o._resolve_date())
 		if isinstance(o, dict):
