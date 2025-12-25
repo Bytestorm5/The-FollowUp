@@ -277,7 +277,7 @@ def _generate_roundup(rtype: str, start: datetime.date, end: datetime.date, temp
             sources=sources_list,
             seed_articles=seed,
             lm_log=getattr(out, 'lm_log', None),
-        )
+        ) # type: ignore
         return doc.model_dump() if hasattr(doc, 'model_dump') else doc.dict()
     except Exception:
         logger.exception('Failed to construct SilverRoundup for %s %s..%s', rtype, start, end)

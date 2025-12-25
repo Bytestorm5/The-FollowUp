@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import Script from "next/script";
 import Countdown from "@/components/Countdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsCollection, getSilverUpdatesCollection, ObjectId, type SilverClaim, type SilverFollowup, type SilverUpdate } from "@/lib/mongo";
 import AdsenseAd from "@/components/AdSenseAd";
+import { absUrl } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -135,6 +138,34 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-4 py-8">
+        {/* ClaimReview JSON-LD for statements */}
+        {claim.type === "statement" && latest && (() => {
+          const idStr = String((claim as any)._id);
+          const url = absUrl(`/claim/${(claim as any).slug || idStr}`);
+          const verdict = latest.verdict as string;
+          const alt = verdict === "complete" ? "True" : verdict === "failed" ? "False" : "Complicated";
+          const ratingValue = verdict === "complete" ? 5 : verdict === "failed" ? 1 : 3;
+          const datePublished = (() => { try { return new Date((latest as any).created_at as any).toISOString(); } catch { return undefined; } })();
+          const data = {
+            '@context': 'https://schema.org',
+            '@type': 'ClaimReview',
+            url,
+            datePublished,
+            claimReviewed: (claim as any).claim,
+            reviewRating: {
+              '@type': 'Rating',
+              ratingValue,
+              worstRating: 1,
+              bestRating: 5,
+              alternateName: alt,
+            },
+            author: {
+              '@type': 'Organization',
+              name: 'The Follow Up',
+            },
+          } as any;
+          return <Script id="ld-claimreview" type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />;
+        })()}
         <div className="dateline mb-1">{claim.type.toUpperCase()}</div>
         <h1 className="text-3xl font-semibold tracking-tight" style={{ fontFamily: "var(--font-serif)" }}>
           {claim.claim}
@@ -314,4 +345,44 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
       </div>
     </div>
   );
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const claimsColl = await getSilverClaimsCollection();
+  let claim: SilverClaim | null = null;
+  try {
+    const oid = new ObjectId(id);
+    claim = (await claimsColl.findOne({ _id: oid })) as any;
+  } catch {
+    claim = (await claimsColl.findOne({ slug: id as any })) as any;
+    if (!claim) claim = (await claimsColl.findOne({ _id: id as any })) as any;
+  }
+  if (!claim) return {};
+
+  // source summary for description
+  let sourceSummary: string | null = null;
+  try {
+    const artColl = await getBronzeCollection();
+    const art = await artColl.findOne({ _id: (() => { try { return new ObjectId(String((claim as any).article_id)); } catch { return (claim as any).article_id; } })() as any });
+    sourceSummary = (art as any)?.summary_paragraph ?? null;
+  } catch {}
+
+  const title = (claim as any).claim;
+  const description = sourceSummary || (claim as any).completion_condition || "";
+  const path = `/claim/${(claim as any).slug || String((claim as any)._id)}`;
+  const url = absUrl(path);
+
+  return {
+    title,
+    description,
+    alternates: { canonical: path },
+    openGraph: {
+      type: "article",
+      url,
+      title,
+      description,
+    },
+    twitter: { card: "summary", title, description },
+  };
 }

@@ -3,6 +3,7 @@ import { Inter, Source_Serif_4 } from "next/font/google";
 import NavBar from "@/components/NavBar";
 import Script from "next/script";
 import "./globals.css";
+import { getSiteUrl } from "@/lib/seo";
 
 /* Fonts: Inter (sans) for UI/body, Source Serif for headlines */
 const inter = Inter({
@@ -18,8 +19,31 @@ const sourceSerif = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
-  title: "The Follow Up",
+  metadataBase: new URL(getSiteUrl()),
+  title: {
+    default: "The Follow Up",
+    template: "%s · The Follow Up",
+  },
   description: "Calm, factual follow-up on public promises",
+  applicationName: "The Follow Up",
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: "The Follow Up",
+    title: "The Follow Up",
+    description: "Calm, factual follow-up on public promises",
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@",
+    creator: "@",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({

@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import Script from "next/script";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { mapVerdictDisplay } from "@/lib/verdict";
 import AdsenseAd from "@/components/AdSenseAd";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverUpdatesCollection, ObjectId, type BronzeLink, type SilverClaim, type SilverUpdate } from "@/lib/mongo";
+import { absUrl } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +27,43 @@ function typeLabel(t: SilverClaim["type"]) {
   if (t === "goal") return "Goal";
   if (t === "promise") return "Promise";
   return "Statement";
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const coll = await getBronzeCollection();
+  let doc: BronzeLink | null = null;
+  try {
+    const oid = new ObjectId(id);
+    doc = await coll.findOne({ _id: oid });
+  } catch {
+    doc = (await coll.findOne({ slug: id as any })) as any;
+    if (!doc) doc = (await coll.findOne({ _id: id as any })) as any;
+  }
+
+  if (!doc) return {};
+
+  const title = doc.title;
+  const description = (doc as any).summary_paragraph || (Array.isArray((doc as any).key_takeaways) ? (doc as any).key_takeaways[0] : "");
+  const path = `/article/${(doc as any).slug || String((doc as any)._id)}`;
+  const url = absUrl(path);
+  const published = (() => { try { return new Date((doc as any).date as any).toISOString(); } catch { return undefined; } })();
+  const tags = (doc as any).tags || undefined;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: path },
+    openGraph: {
+      type: "article",
+      url,
+      title,
+      description,
+      tags,
+      publishedTime: published,
+    },
+    twitter: { card: "summary_large_image", title, description },
+  };
 }
 
 
@@ -91,6 +131,32 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-4 py-8">
+        {/* Article JSON-LD */}
+        {(() => {
+          const idStr = String((doc as any)._id);
+          const url = absUrl(`/article/${(doc as any).slug || idStr}`);
+          const dateISO = (() => { try { return new Date((doc as any).date as any).toISOString(); } catch { return undefined; } })();
+          const data = {
+            '@context': 'https://schema.org',
+            '@type': 'Article',
+            mainEntityOfPage: url,
+            headline: (doc as any).title,
+            datePublished: dateISO,
+            dateModified: dateISO,
+            author: {
+              '@type': 'Organization',
+              name: 'The Follow Up',
+            },
+            publisher: {
+              '@type': 'Organization',
+              name: 'The Follow Up',
+            },
+            description: (doc as any).summary_paragraph || undefined,
+          } as any;
+          return (
+            <Script id="ld-article" type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />
+          );
+        })()}
         <div className="dateline mb-1">{fmtDateUTC(doc.date as any)}{domain ? ` · ${domain}` : ""}</div>
         {(() => {
           const p: any = (doc as any).priority;
