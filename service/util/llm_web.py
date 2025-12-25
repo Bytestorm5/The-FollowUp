@@ -12,10 +12,11 @@ Usage example:
 """
 from __future__ import annotations
 
+from enum import Enum
 import json
 import logging
 import os, sys
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, Union
 from dataclasses import dataclass, field
 
 from bs4 import BeautifulSoup
@@ -24,10 +25,7 @@ import requests
 from urllib.parse import urlparse, parse_qs, unquote, urljoin, quote_plus
 
 # Optional: DDGS (DuckDuckGo Search) library
-try:
-    from ddgs import DDGS  # type: ignore
-except Exception:
-    DDGS = None  # type: ignore
+from ddgs import DDGS  # type: ignore
 
 
 _HERE = os.path.dirname(__file__)
@@ -36,6 +34,7 @@ if _SERVICE_ROOT not in sys.path:
     sys.path.insert(0, _SERVICE_ROOT)
 
 from util.scrape_utils import playwright_get
+from util import mongo
 from models import LMLogEntry
 from util.schema_outline import compact_outline_from_model
 logger = logging.getLogger(__name__)
@@ -181,6 +180,133 @@ def _ddg_search(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
     return _ddg_search_html(query, max_results=max_results)
 
 
+def _ddg_news_search(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+    """Perform a DuckDuckGo News search using DDGS when available.
+
+    Returns a list of {title, url, snippet, date?}
+    """
+    if DDGS is None:
+        return []
+    out: List[Dict[str, Any]] = []
+    try:
+        with DDGS(timeout=15) as ddgs:
+            # DDGS.news is available in ddgs; fallback to text if missing
+            for r in ddgs.news(query, max_results=max_results):  # type: ignore[call-arg]
+                try:
+                    title = str(r.get("title") or r.get("heading") or "").strip()
+                    url = str(r.get("url") or r.get("href") or "").strip()
+                    snippet = str(r.get("body") or r.get("snippet") or "").strip()
+                    date = r.get("date") or r.get("published")
+                    if url:
+                        item = {"title": title or url, "url": url, "snippet": snippet}
+                        if date:
+                            item["date"] = date
+                        out.append(item)
+                except Exception:
+                    continue
+                if len(out) >= max_results:
+                    break
+    except Exception:
+        return []
+    return out[:max_results]
+
+
+def _internal_search(query: str, max_articles: int = 10, max_claims: int = 20) -> Dict[str, Any]:
+    """Search internal Mongo collections similar to the frontend search page.
+
+    - Articles: search bronze_links across title, clean_markdown, raw_content, summary_paragraph, key_takeaways
+    - Claims: search silver_claims across claim, verbatim_claim, completion_condition and attach latest update verdict
+    """
+    try:
+        db = getattr(mongo, 'DB', None)
+        bronze = getattr(mongo, 'bronze_links', None)
+        claims_coll = getattr(mongo, 'silver_claims', None)
+        if db is None or bronze is None or claims_coll is None:
+            return {"error": "Mongo collections not available"}
+
+        # Case-insensitive regex match; simple, portable approximation of Atlas Search
+        regex = {"$regex": query, "$options": "i"}
+
+        # Articles
+        articles: List[Dict[str, Any]] = []
+        try:
+            acur = bronze.find(
+                {"$or": [
+                    {"title": regex},
+                    {"clean_markdown": regex},
+                    {"raw_content": regex},
+                    {"summary_paragraph": regex},
+                    {"key_takeaways": regex},
+                ]},
+                projection={"title": 1, "date": 1, "link": 1, "summary_paragraph": 1},
+            ).sort([("date", -1), ("_id", -1)]).limit(int(max_articles or 10))
+            for a in acur:
+                try:
+                    articles.append({
+                        "id": str(a.get("_id")),
+                        "title": a.get("title"),
+                        "date": a.get("date"),
+                        "link": a.get("link"),
+                        "summary_paragraph": a.get("summary_paragraph"),
+                    })
+                except Exception:
+                    continue
+        except Exception:
+            articles = []
+
+        # Claims
+        claims: List[Dict[str, Any]] = []
+        claim_ids: List[Any] = []
+        try:
+            ccur = claims_coll.find(
+                {"$or": [
+                    {"claim": regex},
+                    {"verbatim_claim": regex},
+                    {"completion_condition": regex},
+                ]},
+                projection={"claim": 1, "verbatim_claim": 1, "type": 1, "completion_condition": 1, "completion_condition_date": 1},
+            ).sort([("_id", -1)]).limit(int(max_claims or 20))
+            for c in ccur:
+                cid = c.get("_id")
+                claim_ids.append(cid)
+                claims.append({
+                    "id": str(cid),
+                    "claim": c.get("claim"),
+                    "type": c.get("type"),
+                    "completion_condition": c.get("completion_condition"),
+                    "completion_condition_date": c.get("completion_condition_date"),
+                    "latest_update": None,
+                })
+        except Exception:
+            claims = []
+            claim_ids = []
+
+        # Latest updates per claim
+        try:
+            updates_coll = db.get_collection('silver_updates')
+            if claim_ids:
+                ucur = updates_coll.find(
+                    {"claim_id": {"$in": claim_ids}},
+                    projection={"claim_id": 1, "verdict": 1, "created_at": 1},
+                ).sort([("created_at", -1), ("_id", -1)])
+                latest: Dict[str, Dict[str, Any]] = {}
+                for u in ucur:
+                    key = str(u.get("claim_id"))
+                    if key not in latest:
+                        latest[key] = {"verdict": u.get("verdict"), "created_at": u.get("created_at")}
+                # Attach
+                for c in claims:
+                    lid = latest.get(c["id"]) if isinstance(latest, dict) else None
+                    if lid:
+                        c["latest_update"] = lid
+        except Exception:
+            pass
+
+        return {"articles": articles, "claims": claims}
+    except Exception as e:
+        return {"error": f"internal search failed: {e}"}
+
+
 def _html_to_text(html: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
     for s in soup(["script", "style", "noscript"]):
@@ -208,15 +334,45 @@ def _handle_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         q = str(arguments.get("query", "")).strip()
         k = int(arguments.get("max_results", 5) or 5)
         return {"results": _ddg_search(q, max_results=k)}
+    if name == "ddg_news_search":
+        q = str(arguments.get("query", "")).strip()
+        k = int(arguments.get("max_results", 5) or 5)
+        return {"results": _ddg_news_search(q, max_results=k)}
     if name == "fetch_url":
         url = str(arguments.get("url", ""))
         max_chars = int(arguments.get("max_chars", 50000) or 50000)
         return _fetch_url(url, max_chars=max_chars)
+    if name == "internal_search":
+        q = str(arguments.get("query", "")).strip()
+        max_articles = int(arguments.get("max_articles", 10) or 10)
+        max_claims = int(arguments.get("max_claims", 20) or 20)
+        return _internal_search(q, max_articles=max_articles, max_claims=max_claims)
     return {"error": f"Unknown tool {name}"}
 
-def _tool_defs():
-    return [
-        {
+class ToolSet(Enum):
+    WEB_SEARCH = "ddg_web"
+    NEWS_SEARCH = "ddg_news"
+    INTERNAL_SEARCH = "internal"
+
+ToolChoices = Iterable[ToolSet]
+
+def _tool_defs(choices: Optional[ToolChoices] = None):
+    # Build tool list based on selected choices. Defaults handled in run_with_search.
+    enabled: set[str] = set()
+    if choices is not None:
+        for c in choices:
+            try:
+                enabled.add(c.value)
+            except Exception:
+                continue
+    else:
+        choices = [x for x in ToolSet]
+
+    tools: List[Dict[str, Any]] = []
+
+    # Conditionally add DDG web search
+    if ToolSet.WEB_SEARCH in choices:
+        tools.append({
             "type": "function",
             "name": "ddg_web_search",
             "description": "Search the public web for a query and return relevant links with snippets.",
@@ -230,8 +386,29 @@ def _tool_defs():
                 "required": ["query", "max_results"],
                 "additionalProperties": False,
             },
-        },
-        {
+        })
+
+    # Conditionally add DDG news search
+    if ToolSet.NEWS_SEARCH in choices:
+        tools.append({
+            "type": "function",
+            "name": "ddg_news_search",
+            "description": "Search DuckDuckGo News for a query and return relevant news links.",
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "News search query"},
+                    "max_results": {"type": ["integer", "null"], "minimum": 1, "maximum": 25, "default": 5},
+                },
+                "required": ["query", "max_results"],
+                "additionalProperties": False,
+            },
+        })
+
+    # If any external web tool is enabled (web or news), also enable fetch_url
+    if ToolSet.WEB_SEARCH in choices or ToolSet.NEWS_SEARCH in choices:
+        tools.append({
             "type": "function",
             "name": "fetch_url",
             "description": "Fetch the readable content of a URL (JS-rendered if needed) and return plain text.",
@@ -245,8 +422,28 @@ def _tool_defs():
                 "required": ["url", "max_chars"],
                 "additionalProperties": False,
             },
-        },
-    ]
+        })
+
+    # Conditionally add internal search
+    if ToolSet.INTERNAL_SEARCH in choices:
+        tools.append({
+            "type": "function",
+            "name": "internal_search",
+            "description": "Search our in-house knowledge base for articles and claims. If this tool is available, you are expected to use it at least once for the current task.",
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search text"},
+                    "max_articles": {"type": ["integer", "null"], "minimum": 1, "maximum": 50, "default": 10},
+                    "max_claims": {"type": ["integer", "null"], "minimum": 1, "maximum": 100, "default": 20},
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        })
+
+    return tools
 
 @dataclass
 class SearchOutput:
@@ -307,6 +504,7 @@ def run_with_search(
     model: str = "gpt-5-mini",
     text_format: Optional[Union[type[BaseModel], BaseModel]]  = None,
     task_system: Optional[str] = None,
+    tool_choices: Optional[ToolChoices] = None,
 ) -> SearchOutput:
     def _make_log_from_response(resp: Any) -> Optional[LMLogEntry]:
         try:
@@ -345,7 +543,10 @@ def run_with_search(
                 {"role": "system", "content": str(task_system).strip()},
             ]
         messages.append({"role": "user", "content": input_text})
-        tools = _tool_defs()
+        # Default tools: WEB_SEARCH and NEWS_SEARCH if none provided
+        if tool_choices is None:
+            tool_choices = [ToolSet.WEB_SEARCH, ToolSet.NEWS_SEARCH]
+        tools = _tool_defs(tool_choices)
         sources: List[Dict[str, Any]] = []
 
         # Guard against infinite loops
