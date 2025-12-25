@@ -164,18 +164,18 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
             </ul>
           </section>
         )}
-        <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
+        {/* <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
           <AdsenseAd adSlot="5978223516" format="fluid" layout="in-article" style={{ display: "block", textAlign: "center" }}  />
         </div>
 
         
 
-        {/* Cleaned article text (Markdown) */}
+        
         {doc.clean_markdown && (
           <section className="prose prose-neutral mt-8 max-w-none">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.clean_markdown}</ReactMarkdown>
           </section>
-        )}
+        )} */}
 
         {/* Footer ad slot */}
         <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">
