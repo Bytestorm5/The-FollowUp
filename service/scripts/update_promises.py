@@ -661,17 +661,17 @@ def main():
         model = req.get('model')
         content_str = req.get('input', '')
         task_system = req.get('system', '')
+        # Determine if this request is a fact check (statement) up-front
+        try:
+            is_factcheck = str(custom_id).startswith("statement:")
+        except Exception:
+            is_factcheck = False
         parsed_obj = None
         model_text = ''
         verdict = 'in_progress'
         try:
             # Choose schema based on custom id (statements use fact check schema)
-            use_factcheck = False
-            try:
-                use_factcheck = str(custom_id).startswith("statement:")
-            except Exception:
-                use_factcheck = False
-            schema = FactCheckResponseOutput if use_factcheck else ModelResponseOutput
+            schema = FactCheckResponseOutput if is_factcheck else ModelResponseOutput
 
             run_res = run_with_search(content_str, model=model, text_format=schema, task_system=task_system)
             model_text = (run_res.text or '').strip()
@@ -695,7 +695,7 @@ def main():
                     pass
             if parsed_obj is not None:
                 try:
-                    if use_factcheck:
+                    if is_factcheck:
                         fc_verdict = getattr(parsed_obj, 'verdict', '')
                         verdict = str(fc_verdict) or verdict
                     else:
@@ -708,10 +708,10 @@ def main():
                     pass
             else:
                 verdict = _classify_verdict(model_text)
-        except Exception:
-            logger.exception(f'Error calling run_with_search for custom_id={custom_id}')
+        except Exception as e:
+            logger.exception(f'Error calling run_with_search for custom_id={custom_id} | {str(e)}')
             model_text = 'error calling run_with_search'
-            verdict = 'failed'
+            verdict = 'Tech Error'
 
         def _coerce_date(val):
             if val is None:
@@ -757,6 +757,16 @@ def main():
             except Exception:
                 return None
 
+        # Compute the final model_output value once
+        model_output_val = _norm_model_output(parsed_obj) if parsed_obj is not None else model_text
+        # If this is a fact check and model output indicates a tech error, set verdict accordingly
+        try:
+            mo_is_error = isinstance(model_output_val, str) and model_output_val.strip().lower().startswith('error calling')
+        except Exception:
+            mo_is_error = False
+        if is_factcheck and mo_is_error:
+            verdict = 'Tech Error'
+
         if is_followup and followup_doc is not None:
             doc = {
                 'claim_id': followup_doc.get('claim_id'),
@@ -764,7 +774,7 @@ def main():
                 'article_id': followup_doc.get('article_id', ''),
                 'article_link': followup_doc.get('article_link', ''),
                 'article_date': followup_doc.get('article_date', None),
-                'model_output': _norm_model_output(parsed_obj) if parsed_obj is not None else model_text,
+                'model_output': model_output_val,
                 'verdict': verdict,
                 'created_at': datetime.datetime.utcnow(),
             }
@@ -775,7 +785,7 @@ def main():
                 'article_id': getattr(claim, 'article_id', ''),
                 'article_link': getattr(claim, 'article_link', ''),
                 'article_date': getattr(claim, 'article_date', None),
-                'model_output': _norm_model_output(parsed_obj) if parsed_obj is not None else model_text,
+                'model_output': model_output_val,
                 'verdict': verdict,
                 'created_at': datetime.datetime.utcnow(),
             }
@@ -789,7 +799,7 @@ def main():
                         'follow_up_date': follow_date,
                         'article_id': followup_doc.get('article_id', ''),
                         'article_link': followup_doc.get('article_link', ''),
-                        'model_output': _norm_model_output(parsed_obj) if parsed_obj is not None else model_text,
+                        'model_output': model_output_val,
                         'created_at': datetime.datetime.utcnow(),
                     }
                 else:
@@ -799,7 +809,7 @@ def main():
                         'follow_up_date': follow_date,
                         'article_id': getattr(claim, 'article_id', ''),
                         'article_link': getattr(claim, 'article_link', ''),
-                        'model_output': _norm_model_output(parsed_obj) if parsed_obj is not None else model_text,
+                        'model_output': model_output_val,
                         'created_at': datetime.datetime.utcnow(),
                     }
                 try:
