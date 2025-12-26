@@ -53,6 +53,7 @@ export default function NavBar() {
             <Link href="/about" className="text-sm font-medium text-foreground hover:opacity-80">About</Link>
             <div className="invisible absolute left-1/2 top-full z-50 w-44 -translate-x-1/2 rounded-md border border-[var(--color-border)] bg-background p-1 text-sm opacity-0 shadow-md transition group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto">
               <Link href="/about/statistics" className="block rounded px-3 py-2 hover:bg-black/5">Statistics</Link>
+              <Link href="/about/methodology" className="block rounded px-3 py-2 hover:bg-black/5">Methodology</Link>
             </div>
           </div>
 
@@ -96,6 +97,7 @@ export default function NavBar() {
           <div className="mt-2 font-semibold text-foreground/80">About</div>
           <Link href="/about" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Mission</Link>
           <Link href="/about/statistics" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Statistics</Link>
+          <Link href="/about/methodology" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Methodology</Link>
         </nav>
       </aside>
     </header>

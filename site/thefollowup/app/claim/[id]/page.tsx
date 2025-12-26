@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsCollection, getSilverUpdatesCollection, ObjectId, type SilverClaim, type SilverFollowup, type SilverUpdate } from "@/lib/mongo";
 import AdsenseAd from "@/components/AdSenseAd";
 import { absUrl } from "@/lib/seo";
+import { getVerdictInfo } from "@/lib/factcheck";
 
 export const dynamic = "force-dynamic";
 
@@ -142,9 +143,11 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
         {claim.type === "statement" && latest && (() => {
           const idStr = String((claim as any)._id);
           const url = absUrl(`/claim/${(claim as any).slug || idStr}`);
-          const verdict = latest.verdict as string;
-          const alt = verdict === "complete" ? "True" : verdict === "failed" ? "False" : "Complicated";
-          const ratingValue = verdict === "complete" ? 5 : verdict === "failed" ? 1 : 3;
+          const mo: any = (latest as any).model_output;
+          const rawVerdict: string | undefined = (mo && typeof mo === 'object' && mo?.verdict) ? String(mo.verdict) : String((latest as any)?.verdict || "");
+          const info = getVerdictInfo(rawVerdict);
+          const alt = info?.label || "Unclear";
+          const ratingValue = alt === "True" ? 5 : alt === "False" ? 1 : 3;
           const datePublished = (() => { try { return new Date((latest as any).created_at as any).toISOString(); } catch { return undefined; } })();
           const data = {
             '@context': 'https://schema.org',
@@ -170,26 +173,24 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
         <h1 className="text-3xl font-semibold tracking-tight" style={{ fontFamily: "var(--font-serif)" }}>
           {claim.claim}
         </h1>
-        {latest && (
-          <div className="mt-2 text-xs uppercase tracking-wide text-foreground/70">
-            Status:
-            <span
-              className="ml-2 rounded-full border px-2 py-0.5 lowercase"
-              style={{
-                color:
-                  latest.verdict === "complete"
-                    ? "var(--color-status-succeeded)"
-                    : latest.verdict === "failed"
-                    ? "var(--color-status-failed)"
-                    : "var(--color-status-pending)",
-              }}
-            >
-              {claim.type === "statement"
-                ? (latest.verdict === "complete" ? "True" : latest.verdict === "failed" ? "False" : "Complicated")
-                : latest.verdict.replace("_", " ")}
-            </span>
-          </div>
-        )}
+        {latest && (() => {
+          const mo: any = (latest as any).model_output;
+          const rawVerdict: string | undefined = (mo && typeof mo === 'object' && mo?.verdict) ? String(mo.verdict) : String((latest as any)?.verdict || "");
+          const info = getVerdictInfo(rawVerdict);
+          if (!info) return null;
+          return (
+            <div className="mt-2">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide" style={{ color: info.color }}>
+                {info.icon}
+                <span>{info.label}</span>
+              </div>
+              <p className="mt-1 text-sm text-foreground/80">
+                {info.explanation} {" "}
+                <Link href="/about/methodology" className="underline decoration-dotted underline-offset-2">Learn more in Methodology</Link>.
+              </p>
+            </div>
+          );
+        })()}
         <hr className="mt-4" />
 
         {/* Mechanism pill if present */}

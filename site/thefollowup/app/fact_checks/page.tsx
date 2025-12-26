@@ -2,30 +2,11 @@ import Link from "next/link";
 import { getSilverClaimsCollection, getSilverUpdatesCollection, ObjectId, type SilverClaim, type SilverUpdate } from "@/lib/mongo";
 import { parseISODate, searchClaimIdsByText } from "@/lib/search";
 import { mapVerdictDisplay } from "@/lib/verdict";
+import { getVerdictInfo, getVerdictSlug, verdictFilterOptions } from "@/lib/factcheck";
 import Pagination from "@/components/Pagination";
 import AdsenseAd from "@/components/AdSenseAd";
 
 export const dynamic = "force-dynamic";
-
-function verdictLabel(v?: string) {
-  if (v === "complete") return "True";
-  if (v === "failed") return "False";
-  return "Complicated";
-}
-
-function VerdictIcon({ verdict }: { verdict?: string }) {
-  if (verdict === "complete")
-    return (
-      <svg className="inline-block h-3.5 w-3.5" viewBox="0 0 20 20" fill="var(--color-status-succeeded)"><path d="M16.704 5.29a1 1 0 0 1 .006 1.414l-7.25 7.333a1 1 0 0 1-1.438.006L3.29 9.99A1 1 0 1 1 4.71 8.57l3.03 3.016 6.544-6.613a1 1 0 0 1 1.42.317z"/></svg>
-    );
-  if (verdict === "failed")
-    return (
-      <svg className="inline-block h-3.5 w-3.5" viewBox="0 0 20 20" fill="var(--color-status-failed)"><path d="M11.414 10l3.536-3.536a1 1 0 0 0-1.414-1.414L10 8.586 6.464 5.05A1 1 0 1 0 5.05 6.464L8.586 10l-3.536 3.536a1 1 0 1 0 1.414 1.414L10 11.414l3.536 3.536a1 1 0 0 0 1.414-1.414L11.414 10z"/></svg>
-    );
-  return (
-    <svg className="inline-block h-3.5 w-3.5" viewBox="0 0 20 20" fill="var(--color-status-technicality)"><path d="M10 2a1 1 0 0 1 .894.553l7 14A1 1 0 0 1 17 18H3a1 1 0 0 1-.894-1.447l7-14A1 1 0 0 1 10 2zm0 12a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm-1-6v4a1 1 0 1 0 2 0V8a1 1 0 1 0-2 0z"/></svg>
-  );
-}
 
 export default async function FactChecksPage({
   searchParams,
@@ -34,7 +15,7 @@ export default async function FactChecksPage({
 }) {
   const sp = await searchParams;
   const q = String(sp?.q ?? "").trim();
-  const v = String(sp?.v ?? "").toLowerCase(); // "true" | "false" | "complicated" | ""
+  const v = String(sp?.v ?? "").toLowerCase(); // slug like "true", "close", "tech-error"
   const from = parseISODate(sp?.from);
   const to = parseISODate(sp?.to);
   const page = Math.max(1, parseInt(String(sp?.page ?? "1"), 10) || 1);
@@ -70,9 +51,10 @@ export default async function FactChecksPage({
       // extract latest text for search
       const mo: any = (lu as any).model_output;
       const latestText: string | undefined = typeof mo === "string" ? mo : mo?.text;
-      return { id: String(c._id), slug: c.slug ? String(c.slug) : undefined, claim: c.claim, latest: lu, latestText };
+      const latestVerdict: string | undefined = (mo && typeof mo === "object" && mo?.verdict) ? String(mo.verdict) : String((lu as any)?.verdict || "");
+      return { id: String(c._id), slug: c.slug ? String(c.slug) : undefined, claim: c.claim, latest: lu, latestText, latestVerdict };
     })
-    .filter(Boolean) as { id: string; slug?: string; claim: string; latest: SilverUpdate; latestText?: string }[];
+    .filter(Boolean) as { id: string; slug?: string; claim: string; latest: SilverUpdate; latestText?: string; latestVerdict?: string }[];
 
   // MongoDB Atlas Search (fuzzy) for q against claims and updates
   let idsBySearch: Set<string> | null = null;
@@ -81,8 +63,8 @@ export default async function FactChecksPage({
   const rowsFiltered = rows.filter((r) => {
     // verdict filter
     if (v) {
-      const label = verdictLabel(r.latest.verdict).toLowerCase();
-      if (label !== v) return false;
+      const slug = getVerdictSlug(r.latestVerdict);
+      if (slug !== v) return false;
     }
     // date filter on latest update timestamp
     if (from && new Date(r.latest.created_at as any).getTime() < from.getTime()) return false;
@@ -120,10 +102,9 @@ export default async function FactChecksPage({
           <div className="flex flex-col">
             <label htmlFor="v" className="text-xs text-foreground/70">Verdict</label>
             <select id="v" name="v" defaultValue={v} className="rounded-md border px-2 py-1 text-sm">
-              <option value="">All</option>
-              <option value="true">True</option>
-              <option value="complicated">Complicated</option>
-              <option value="false">False</option>
+              {verdictFilterOptions().map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
             </select>
           </div>
           <div className="flex min-w-[200px] flex-1 flex-col">
@@ -148,20 +129,34 @@ export default async function FactChecksPage({
           <p className="mt-6 text-foreground/70">No fact checks yet.</p>
         ) : (
           <ul className="mt-6 space-y-4">
-            {rowsPage.map((r) => (
-              <li key={r.id} className="card border border-[var(--color-border)] p-4">
-                {(() => { const d = mapVerdictDisplay(r.latest.verdict); return (
-                  <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wide" style={{ color: d.color }}>
+            {rowsPage.map((r) => {
+              const info = getVerdictInfo(r.latestVerdict);
+              const d = mapVerdictDisplay(info?.label || r.latest.verdict);
+              const tooltip = info ? `${info.explanation} Learn more in Methodology.` : undefined;
+              return (
+                <li key={r.id} className="card border border-[var(--color-border)] p-4">
+                  <div
+                    className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wide"
+                    style={{ color: d.color }}
+                    title={tooltip}
+                  >
                     {d.icon}
-                    <span>{d.label}</span>
+                    <span>{info?.label ?? d.label}</span>
+                    <Link
+                      href="/about/methodology"
+                      className="ml-1 underline decoration-dotted underline-offset-4 text-foreground/70 hover:text-foreground/90"
+                      aria-label="Read about verdict categories in Methodology"
+                    >
+                      ?
+                    </Link>
                   </div>
-                );})()}
-                <Link href={`/claim/${r.slug || r.id}`} className="text-lg font-semibold hover:underline" style={{ fontFamily: "var(--font-serif)" }}>
-                  {r.claim}
-                </Link>
-                <div className="mt-1 text-xs text-foreground/60">Updated {new Date(r.latest.created_at as any).toLocaleString()}</div>
-              </li>
-            ))}
+                  <Link href={`/claim/${r.slug || r.id}`} className="text-lg font-semibold hover:underline" style={{ fontFamily: "var(--font-serif)" }}>
+                    {r.claim}
+                  </Link>
+                  <div className="mt-1 text-xs text-foreground/60">Updated {new Date(r.latest.created_at as any).toLocaleString()}</div>
+                </li>
+              );
+            })}
           </ul>
         )}
 
