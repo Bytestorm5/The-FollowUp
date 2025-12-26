@@ -48,7 +48,14 @@ def _scrape_page(url, scrape_date: datetime.date):
             break
         # Print the extracted information
         # print(f"Title: {title}, Link: {link}, Article Type: {article_type}, Date: {date}")
-        articles.append(ArticleLink(title=title, link=link, date=date, tags=[article_type], process_posturing=True, raw_content=_extract(link)))
+        articles.append(ArticleLink(
+            title=title, 
+            link=link, 
+            date=date, 
+            tags=["White House", article_type], 
+            process_posturing=True, 
+            raw_content=_extract(link)
+        ))
     res = LinkAggregationStep(articles=articles, look_further=look_further)       
     logging.getLogger(__name__).info(f"Processed {len(articles)} articles from {url}. Look Further: {look_further}")
     

@@ -152,7 +152,7 @@ def _scrape_page(url: str, scrape_date: datetime.date) -> LinkAggregationStep:
                 title=title,
                 link=link,
                 date=dt,
-                tags=["Press Release", "HUD"],
+                tags=["Department of Housing and Urban Development"],
                 process_posturing=True,
                 raw_content=_extract_article(link),
             )

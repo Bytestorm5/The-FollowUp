@@ -150,6 +150,7 @@ def _parse_press_release_cards(soup: BeautifulSoup, scrape_date: datetime.date) 
         # Only collect exact date matches (skip newer)
         if dt == scrape_date:
             tags = [label] if label else ["Press Release"]
+            tags = ["Department of Transportation"] + [t for t in tags if t]  # Filter out empty tags
             articles.append(
                 ArticleLink(
                     title=title,
@@ -212,7 +213,7 @@ def _parse_speeches_table(soup: BeautifulSoup, scrape_date: datetime.date) -> Li
                     title=title,
                     link=link,
                     date=dt,
-                    tags=["Speech"],
+                    tags=["Department of Transportation", "Speech"],
                     process_posturing=True,
                     raw_content=_extract_article_content(link),
                 )

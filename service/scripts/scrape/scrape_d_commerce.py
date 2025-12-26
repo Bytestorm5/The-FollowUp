@@ -119,7 +119,7 @@ def _scrape_page(url: str, min_date: datetime.date) -> LinkAggregationStep:
 
         # De-dupe while preserving order
         seen = set()
-        tags = []
+        tags = ["Department of Commerce"]
         for t in tag_texts:
             if t not in seen:
                 seen.add(t)

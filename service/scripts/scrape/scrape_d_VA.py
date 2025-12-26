@@ -66,7 +66,7 @@ def scrape(date: datetime.date) -> LinkAggregationResult:
                 title=title,
                 link=link,
                 date=pub_date,
-                tags=[tag],
+                tags=["Department of Veterans Affairs", tag],
                 raw_content=summary,
                 process_posturing=True,
             )

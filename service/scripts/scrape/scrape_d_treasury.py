@@ -126,7 +126,7 @@ def _scrape_page(url: str, scrape_date: datetime.date) -> LinkAggregationStep:
                 title=title,
                 link=link,
                 date=item_date,
-                tags=[tag],
+                tags=["Department of the Treasury", tag],
                 process_posturing=True,
                 raw_content=_extract(link),
             )

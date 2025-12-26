@@ -85,7 +85,7 @@ def scrape(date: datetime.date) -> LinkAggregationResult:
                     title=title,
                     link=link,
                     date=item_date,
-                    tags=[feed_tag],
+                    tags=["Department of State", feed_tag],
                     raw_content=summary,
                     process_posturing=True,
                 )

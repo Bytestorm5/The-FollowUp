@@ -93,7 +93,7 @@ def scrape(date: datetime.date) -> LinkAggregationResult:
                 title=title,
                 link=link,
                 date=pub_date or date,
-                tags=["HHS", "News"],
+                tags=["Department of Health and Human Services"],
                 raw_content=raw,
                 process_posturing=True,
             )

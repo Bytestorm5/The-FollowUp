@@ -112,14 +112,14 @@ def _scrape_page(url: str, scrape_date: datetime.date) -> LinkAggregationStep:
         link = urljoin(BASE_URL, a["href"])
 
         type_a = row.select_one(".news-updates-date-type span.news-type a")
-        news_type = type_a.get_text(strip=True) if type_a else "DHS"
+        news_type = [type_a.get_text(strip=True)] if type_a else []
 
         articles.append(
             ArticleLink(
                 title=title,
                 link=link,
                 date=date,
-                tags=[news_type],
+                tags=["Department of Homeland Security"] + news_type,
                 process_posturing=True,
                 raw_content=_extract(link),
             )

@@ -60,7 +60,7 @@ def _scrape_feed(feed_url: str, scrape_date: datetime.date) -> LinkAggregationSt
                 title=title,
                 link=link,
                 date=item_date,
-                tags=["DOL", "Release"],
+                tags=["Department of Labor", "Release"],
                 raw_content=summary,          # RSS-provided content/description :contentReference[oaicite:6]{index=6}
                 process_posturing=True,
             )

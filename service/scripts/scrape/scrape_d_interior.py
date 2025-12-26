@@ -99,7 +99,7 @@ def _scrape_page(url: str, scrape_date: datetime.date) -> LinkAggregationStep:
                 title=title,
                 link=link,
                 date=published,
-                tags=["DOI", "Press Release"],
+                tags=["Department of the Interior"],
                 process_posturing=True,
                 raw_content=_extract(link),
             )

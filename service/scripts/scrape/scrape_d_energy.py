@@ -172,7 +172,7 @@ def _scrape_page(url: str, scrape_date: datetime.date) -> LinkAggregationStep:
                 title=title,
                 link=link,
                 date=item_date,
-                tags=tags or ["DoE"],
+                tags=tags + ['Department of Energy'],
                 raw_content=raw_content,
                 process_posturing=True,
             )
