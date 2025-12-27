@@ -237,6 +237,14 @@ def _fallback_process_with_responses(
             for step in parsed.steps:
                 claim_doc = _pydantic_dump(step)
 
+                # Skip statements that are direct_action before DB insertion
+                try:
+                    if str(claim_doc.get('type')) == 'statement' and str(claim_doc.get('mechanism')) == 'direct_action':
+                        logger.info('Skipping direct_action statement for article %s', article_id)
+                        continue
+                except Exception:
+                    pass
+
                 article_date_raw = doc.get('date')
                 resolved_article_date = _resolve_date_like(article_date_raw)
 
@@ -532,6 +540,14 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
             # Insert each step as a claim document (validated as MongoClaim)
             for step in result_obj.steps:
                 claim_doc = _pydantic_dump(step)
+
+                # Skip statements that are direct_action before DB insertion
+                try:
+                    if str(claim_doc.get('type')) == 'statement' and str(claim_doc.get('mechanism')) == 'direct_action':
+                        logger.info('Skipping direct_action statement for article %s', article_id)
+                        continue
+                except Exception:
+                    pass
 
                 # Original article metadata
                 orig = docs_by_id.get(article_id, {})

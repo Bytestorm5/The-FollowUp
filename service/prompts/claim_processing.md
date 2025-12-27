@@ -1,72 +1,50 @@
-You are processing an HTML press release from an official government source.
+You are processing a press release from an official government source (raw text).
 
 Goal
-Extract ONLY claims that are worth tracking or checking later in a promise/claim-followup system.
-This is NOT a general fact-extraction task.
+Extract only claims worth tracking or checking later in a promise/claim-followup system. Return 0–5 items; empty is fine.
 
-Return 0–5 items. Returning an empty result is normal and encouraged.
+Core rule
+Only extract items a reasonable person would spend time/credits verifying later.
 
-Core idea: Only extract claims that a reasonable person would spend time/credits verifying later.
+Claim types (type)
+- statement: Verifiable, operationally meaningful action/outcome already done at publication (policy, enforcement, funding, rulemaking, oversight). Omit generic case recaps, moral judgments, fluff, and “commitment to…” rhetoric.
+- goal: Forward-looking objective too vague to verify as complete. Include only if materially tied to policy/operations.
+- promise: Future deliverable with BOTH a measurable outcome AND an explicit deadline/window. If the deadline/window is missing, it is not a promise.
 
-Claim Types (type field)
-- statement:
-  A verifiable, operationally meaningful claim about government action/policy/enforcement/funding/rulemaking/oversight/outcomes.
-  Only include if it is material or provides a meaningful milestone for later follow-up.
-  Do NOT include generic case recaps, moral judgments, fluff, or “commitment to…” rhetoric.
+Hard exclusions
+- Moral judgments/praise/condemnations: “no place for…”, “steadfast commitment…”, “remain vigilant…”.
+- One-off case outcomes with no future deliverable: arraignments, pleas, convictions, sentencings.
+- Background/context that doesn’t create a checkable future obligation.
 
-- goal:
-  A forward-looking objective that is too vague to verify as complete (no measurable deliverable).
-  Include only if it is substantively tied to policy/operations and is not mere posturing.
+Classification rules
+1) Promise wins: If future deliverable + explicit deadline/window → type="promise".
+2) Present/past actions are statements: “invoked”, “issued”, “signed”, “announced”, “filed”, “opened”, “suspended”, etc. → type="statement".
+3) Mixed sentences → split: extract a statement for the done action AND a promise for the future deliverable with its deadline.
 
-- promise:
-  A future-facing commitment with (1) a measurable deliverable AND (2) an explicit deadline or time window stated in the text.
-  If there is no explicit deadline/window, it is NOT a promise.
-
-Hard Exclusions (do NOT extract)
-- Moral judgments / condemnations / praise: “no place for…”, “steadfast commitment…”, “we will remain vigilant…”
-- Completed one-off case updates with no future deliverable: sentencing, arraignment, conviction recaps, etc.
-- Background explanations that don’t create a checkable future obligation.
-
-Classification rules:
-1) Promise always wins:
-   If the text includes a future deliverable + explicit deadline/window → type MUST be "promise".
-
-2) Present/past actions are statements:
-   If the action is already done at publication (“invoked”, “issued”, “signed”, “announced”, “filed”, “opened”, “suspended”) → type MUST be "statement".
-
-3) Split mixed sentences:
-   If a sentence contains BOTH an already-done action AND a future deadline/outcome, extract TWO items:
-   - statement: the action already taken
-   - promise: the future deliverable by the stated deadline
-
-Date semantics:
-- completion_condition_date:
-  DEADLINE ONLY. PROMISE ONLY.
-  Set it ONLY when the text explicitly provides a deadline/window (e.g., “within 10 days”, “by Jan 2026”).
-  Never infer from the article date, “today”, or typical process timelines.
-
-- event_date:
-  EVENT/EFFECTIVE DATE ONLY. STATEMENT ONLY.
-  Set it ONLY if the text explicitly states when the action happened or became effective.
-  If no explicit date is provided, set null.
+Dates
+- completion_condition_date (promise only): Set only when the text explicitly states a deadline/window (“within 10 days”, “by Jan 2026”). Never infer from article date or norms.
+- event_date (statement only): Set only if the text explicitly states when the action happened/became effective. Otherwise null.
 
 Routing/UI fields
-- follow_up_worthy:
-  true for all promises.
-  For statements/goals: true only if the claim is material AND checkable later; otherwise false (or omit the claim entirely).
+- follow_up_worthy: true for all promises. For statements/goals, true only if material and checkable later; otherwise omit the item.
+- priority: high = time‑bound promises; major enforcement/funding/rulemaking actions. medium = meaningful but smaller scope. low = background/context (generally omit).
+- mechanism (optional): See guidance below. If uncertain, omit or use "other".
 
-- priority:
-  high = time-bound promises; major enforcement actions; major funding/rulemaking actions
-  medium = meaningful but smaller-scope items
-  low = background/context (avoid extracting these)
+Mechanism guidance
+Choose the single best fit for how the claim is executed.
 
-- mechanism: (optional)
-  Choose one: direct_action, directive, enforcement, funding, rulemaking, litigation, oversight, other.
+- direct_action: Executed immediately under the actor’s own authority (EO signed, guidance issued, program launched, funds released/paused, policy rescinded/suspended). Triggers: “issued”, “signed”, “launched”, “rescinded”, “suspended”, “released”. Use when the agency/actor itself performs the action now.
+- directive: Actor instructs another entity to act (EO/memo/orders directing agencies to take steps, tasking, interagency coordination requirements). Use when the core action is instructing others to do X by some date.
+- enforcement: Investigations, inspections, prosecutions, penalties, sanctions, fines, arrests, compliance actions, consent orders. Use for actions compelling compliance or penalizing violations.
+- funding: Grants/awards, disbursements, obligations, contracts, loans, cost‑shares, allocations. Use when money flows or is formally committed/obligated.
+- rulemaking: ANPRM/RFI/NPRM/IFR/final rules, guidance with regulatory effect, comment periods, OMB review milestones. Use for regulatory process steps.
+- litigation: Lawsuits, appeals, motions, settlements, consent decrees, court orders. Use when the venue/mechanism is a court.
+- oversight: Audits, IG/GAO reports, evaluations, reviews, hearings, subpoenas for information. Use for review/monitoring rather than enforcement.
+- other: Use when none of the above fits or when ambiguous/mixed with no clear dominant mechanism.
 
-Verbatim requirement
-- verbatim_claim must be an exact excerpt from the article (no paraphrase). If you cannot quote cleanly, do not include the claim.
-
-In contrast, the claim field should be a single sentence that conveys the claim without assuming any context from the article. The reader should be able to get a general sense of what the claim does without having ever seen the article. You can assume knowledge of public figures, departments, and common acronyms.
+Verbatim vs claim
+- verbatim_claim: Exact excerpt from the article (no paraphrase).
+- claim: One concise sentence understandable without the article that captures the action/promise/goal.
 
 Now produce output that exactly matches the following JSON schema:
 
@@ -75,3 +53,4 @@ Now produce output that exactly matches the following JSON schema:
 ----
 ARTICLE:
 {{ARTICLE}}
+

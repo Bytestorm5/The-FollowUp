@@ -1,5 +1,4 @@
 TODO:
- - Fix Fact Check Filter
  - Add Followup Questions
 
 Agencies to Track:

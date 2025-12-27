@@ -28,6 +28,23 @@ const Info = (props: any) => (
   </svg>
 );
 
+const Clock = (props: any) => (
+  <svg
+    className="inline-block h-3.5 w-3.5"
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.5}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <circle cx="10" cy="10" r="7.25" />
+    <path d="M10 5.5V10l3 2" />
+    <circle cx="10" cy="10" r="0.9" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 // Map verdict strings (case-insensitive) to display settings
 export function mapVerdictDisplay(raw?: string): VerdictDisplay {
   const v = (raw || "").trim();
@@ -40,7 +57,7 @@ export function mapVerdictDisplay(raw?: string): VerdictDisplay {
   if (lc === "close") return { label: "Close", color: "var(--color-status-succeeded)", icon: <Info style={{ color: "var(--color-status-succeeded)" }} /> };
   if (lc === "misleading") return { label: "Misleading", color: "var(--color-accent)", icon: <Warn style={{ color: "var(--color-accent)" }} /> };
   if (lc === "unverifiable") return { label: "Unverifiable", color: "var(--color-status-pending)", icon: <Info style={{ color: "var(--color-status-pending)" }} /> };
-  if (lc === "unclear") return { label: "Unclear", color: "var(--color-status-pending)", icon: <Info style={{ color: "var(--color-status-pending)" }} /> };
+  if (lc === "unclear") return { label: "Unclear", color: "var(--color-status-pending)", icon: <Clock style={{ color: "var(--color-status-pending)" }} /> };
 
   // Legacy categories
   if (lc === "complete") return { label: "True", color: "var(--color-status-succeeded)", icon: <Check style={{ color: "var(--color-status-succeeded)" }} /> };
