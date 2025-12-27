@@ -35,6 +35,7 @@ if _SERVICE_ROOT not in sys.path:
 
 from util.scrape_utils import playwright_get
 from util import mongo
+from util.mongo import normalize_dates as _normalize_dates
 from models import LMLogEntry
 from util.schema_outline import compact_outline_from_model
 logger = logging.getLogger(__name__)
@@ -223,7 +224,13 @@ def _ddg_news_search(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
     return out[:max_results]
 
 
-def _internal_search(query: str, max_articles: int = 10, max_claims: int = 20) -> Dict[str, Any]:
+def _internal_search(
+    query: str,
+    max_articles: int = 10,
+    max_claims: int = 20,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Dict[str, Any]:
     """Search internal Mongo collections similar to the frontend search page.
 
     - Articles: search bronze_links across title, clean_markdown, raw_content, summary_paragraph, key_takeaways
@@ -239,17 +246,47 @@ def _internal_search(query: str, max_articles: int = 10, max_claims: int = 20) -
         # Case-insensitive regex match; simple, portable approximation of Atlas Search
         regex = {"$regex": query, "$options": "i"}
 
+        # Optional date filters
+        import datetime as _dt
+        sd: Optional[_dt.date] = None
+        ed: Optional[_dt.date] = None
+        try:
+            if start_date and isinstance(start_date, str) and start_date.strip():
+                sd = _dt.date.fromisoformat(start_date.strip())
+        except Exception:
+            sd = None
+        try:
+            if end_date and isinstance(end_date, str) and end_date.strip():
+                ed = _dt.date.fromisoformat(end_date.strip())
+        except Exception:
+            ed = None
+
+        # Normalize to match stored types (tz-aware datetimes in EST)
+        nsd = _normalize_dates(sd) if sd else None
+        ned = _normalize_dates(ed) if ed else None
+
         # Articles
         articles: List[Dict[str, Any]] = []
         try:
-            acur = bronze.find(
-                {"$or": [
+            _article_filter: Dict[str, Any] = {
+                "$or": [
                     {"title": regex},
                     {"clean_markdown": regex},
                     {"raw_content": regex},
                     {"summary_paragraph": regex},
                     {"key_takeaways": regex},
-                ]},
+                ]
+            }
+            if nsd or ned:
+                rng: Dict[str, Any] = {}
+                if nsd:
+                    rng["$gte"] = nsd
+                if ned:
+                    rng["$lte"] = ned
+                _article_filter["date"] = rng
+
+            acur = bronze.find(
+                _article_filter,
                 projection={"title": 1, "date": 1, "link": 1, "summary_paragraph": 1},
             ).sort([("date", -1), ("_id", -1)]).limit(int(max_articles or 10))
             for a in acur:
@@ -270,12 +307,23 @@ def _internal_search(query: str, max_articles: int = 10, max_claims: int = 20) -
         claims: List[Dict[str, Any]] = []
         claim_ids: List[Any] = []
         try:
-            ccur = claims_coll.find(
-                {"$or": [
+            _claims_filter: Dict[str, Any] = {
+                "$or": [
                     {"claim": regex},
                     {"verbatim_claim": regex},
                     {"completion_condition": regex},
-                ]},
+                ]
+            }
+            if nsd or ned:
+                rng_c: Dict[str, Any] = {}
+                if nsd:
+                    rng_c["$gte"] = nsd
+                if ned:
+                    rng_c["$lte"] = ned
+                _claims_filter["article_date"] = rng_c
+
+            ccur = claims_coll.find(
+                _claims_filter,
                 projection={"claim": 1, "verbatim_claim": 1, "type": 1, "completion_condition": 1, "completion_condition_date": 1},
             ).sort([("_id", -1)]).limit(int(max_claims or 20))
             for c in ccur:
@@ -358,7 +406,11 @@ def _handle_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         q = str(arguments.get("query", "")).strip()
         max_articles = int(arguments.get("max_articles", 10) or 10)
         max_claims = int(arguments.get("max_claims", 20) or 20)
-        return _internal_search(q, max_articles=max_articles, max_claims=max_claims)
+        start_date = arguments.get("start_date")
+        end_date = arguments.get("end_date")
+        sd = str(start_date).strip() if isinstance(start_date, str) and start_date.strip() else None
+        ed = str(end_date).strip() if isinstance(end_date, str) and end_date.strip() else None
+        return _internal_search(q, max_articles=max_articles, max_claims=max_claims, start_date=sd, end_date=ed)
     return {"error": f"Unknown tool {name}"}
 
 class ToolSet(Enum):
@@ -441,7 +493,7 @@ def _tool_defs(choices: Optional[ToolChoices] = None):
         tools.append({
             "type": "function",
             "name": "internal_search",
-            "description": "Search our in-house knowledge base for articles and claims. If this tool is available, you are expected to use it at least once for the current task.",
+            "description": "Search our in-house knowledge base for articles and claims with optional date filtering (ISO YYYY-MM-DD). If this tool is available, you are expected to use it at least once for the current task.",
             "strict": True,
             "parameters": {
                 "type": "object",
@@ -449,6 +501,8 @@ def _tool_defs(choices: Optional[ToolChoices] = None):
                     "query": {"type": "string", "description": "Search text"},
                     "max_articles": {"type": ["integer", "null"], "minimum": 1, "maximum": 50, "default": 10},
                     "max_claims": {"type": ["integer", "null"], "minimum": 1, "maximum": 100, "default": 20},
+                    "start_date": {"type": ["string", "null"], "description": "Earliest article/claim date (YYYY-MM-DD)"},
+                    "end_date": {"type": ["string", "null"], "description": "Latest article/claim date (YYYY-MM-DD)"},
                 },
                 "required": ["query", "max_articles", "max_claims"],
                 "additionalProperties": False,
@@ -513,6 +567,22 @@ For tools prefixed with "ddg_", you have the ability to use modifiers on your qu
 - You can exclude specific websites by appending ' -site:example.com' to your query.
 - You can specify exact phrases by enclosing them in double quotes. (Ex. climate change "botswana")
 - You can specify "filetype:..." to filter results by file type. (Ex. filetype:pdf)
+In all matters, you must follow the stances and standards of The Follow Up News (thefollowup.ai):
+ - Strictly avoid untrustworthy, biased, or low-quality sources.
+     - NY Post, Washington Times, Grokipedia, Times of Israel, Hindustan Times, and similar sources are to be considered low-quality and prone to manipulation; avoid using them.
+ - Prioritize factual accuracy, neutrality, and balanced perspectives above all.
+ - Expect all media to be subject to manipulation as to the incentives of the source, and operate accordingly.
+ - Only expect truth when it aligns with incentives; otherwise, treat with skepticism.
+    - Ex: The Department of State can be expected to be truthful when discussing neutral or politically favorable topics, but not when discussing politically sensitive topics that may reflect poorly on the US government.
+ - Viewpoints; While The Follow Up as a general rule is strictly neutral and fact-driven, in certain specific matters it takes a strong stance:
+    - It strongly opposes Israel's occupation of Palestinian territories, strongly supports the rights of Palestinians to human rights and the full return of Palestinian land.
+    - It strongly opposes the Russian invasion of Ukraine and supports Ukrainian sovereignty.
+    - It strongly opposes misinformation, disinformation, and deceptive practices in media and politics.
+    - It is always critical of corporate influence in media and politics, and all interactions between the business world and the government.
+    - It is always critical of all parties operating in the government- trusting them only to do and say things that align with their incentives. The truth can only be expected when it aligns with their incentives.
+ - Always present the facts as accurately as possible in good faith, even if inconvenient to the stances of The Follow Up.
+ - The Follow Up primarily concerns itself with 
+The viewpoints and stances must be strictly adhered to, but do not need to be explicitly mentioned in your final output.
 """
 
 def run_with_search(
