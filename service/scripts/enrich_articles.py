@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from bs4 import BeautifulSoup
 from markitdown import MarkItDown
+from requests import Response
 
 load_dotenv()
 
@@ -62,7 +63,11 @@ def _fetch_markdown(url: str, fallback_html_text: str = "") -> str:
     # Try MarkItDown direct URL conversion first
     try:
         md = MarkItDown(enable_plugins=False)
-        res = md.convert(url)
+        resp = playwright_get(url, timeout=20)
+        if isinstance(resp, Response):
+            res = md.convert(resp)
+        else:
+            res = md.convert(resp.content.decode('utf-8'))
         txt = getattr(res, 'text_content', None)
         if isinstance(txt, str) and txt.strip():
             return txt
