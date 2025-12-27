@@ -208,7 +208,9 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
         {sourceSummary && (
           <div className="mt-4 rounded-md border border-[var(--color-border)] bg-white/60 p-3 text-sm text-foreground/80">
             <div className="mb-1 text-xs uppercase tracking-wide text-foreground/70">Source summary</div>
-            <div>{sourceSummary}</div>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ p: ({ children }) => <>{children}</>, a: ({ href, children }) => <a href={href} className="underline">{children}</a> }}>
+              {sourceSummary}
+            </ReactMarkdown>
             <div className="mt-2 text-base italic">
               <Link href={`/article/${String((claim as any)._articleSlug || (claim as any).article_id)}`} className="hover:underline">View original article →</Link>
             </div>

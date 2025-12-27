@@ -225,7 +225,11 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
             <h2 className="text-lg font-semibold">Key takeaways</h2>
             <ul className="mt-3 list-disc space-y-2 pl-6 text-sm">
               {doc.key_takeaways!.map((t, i) => (
-                <li key={i}>{t}</li>
+                <li key={i}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ p: ({ children }) => <>{children}</>, a: ({ href, children }) => <a href={href} className="underline">{children}</a> }}>
+                    {t}
+                  </ReactMarkdown>
+                </li>
               ))}
             </ul>
           </section>

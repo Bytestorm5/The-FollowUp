@@ -27,3 +27,4 @@ Output:
 Notes:
 - You may use available tools to search the web and internal database to fill in any materially important gaps; keep the focus on the most significant developments.
 - Ensure that the seed articles are represented in the body so the roundup covers known items from our internal knowledge base.
+- The Follow Up primarily concerns itself with news local to the US. This often- but not always- includes international matters that have a direct impact on the US or are of significant global importance.
