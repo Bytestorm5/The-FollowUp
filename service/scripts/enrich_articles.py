@@ -22,7 +22,7 @@ from util import openai_batch as obatch
 from util.scrape_utils import playwright_get
 from util import locks as _locks
 from util.model_select import select_model, MODEL_TABLE
-
+from util.spacy_ner import link_named_entities_in_markdown
 logger = logging.getLogger(__name__)
 
 _OPENAI_CLIENT = OpenAI()
@@ -181,11 +181,13 @@ def _fallback_enrich(docs: list[Dict[str, Any]], template: str) -> None:
             enr, lm_dict = _enrich(art, template)
             if enr is None:
                 continue
+            key_takeaways = list(enr.key_takeaways or [])
+            key_takeaways = [link_named_entities_in_markdown(kt) for kt in key_takeaways]
             update = {
                 '$set': {
-                    'clean_markdown': enr.clean_markdown,
-                    'summary_paragraph': enr.summary_paragraph,
-                    'key_takeaways': list(enr.key_takeaways or []),
+                    'clean_markdown': link_named_entities_in_markdown(enr.clean_markdown),
+                    'summary_paragraph': link_named_entities_in_markdown(enr.summary_paragraph),
+                    'key_takeaways': key_takeaways,
                     'priority': int(getattr(enr, 'priority', 5)),
                     'enrichment_lm_log': lm_dict,
                 }
@@ -361,13 +363,14 @@ def run(batch: int = 50):
                 lm_dict = lm.model_dump() if hasattr(lm, 'model_dump') else lm.dict()
             except Exception:
                 lm_dict = None
+            key_takeaways = [link_named_entities_in_markdown(kt) for kt in (enr.key_takeaways or [])]
             mongo.bronze_links.update_one(
                 {'_id': docs_by_id[custom_id]['_id']},
                 {'$set': {
                     # Overwrite with deterministic markitdown result
-                    'clean_markdown': md_by_id.get(custom_id, enr.clean_markdown),
-                    'summary_paragraph': enr.summary_paragraph,
-                    'key_takeaways': list(enr.key_takeaways or []),
+                    'clean_markdown': link_named_entities_in_markdown(md_by_id.get(custom_id, enr.clean_markdown)),
+                    'summary_paragraph': link_named_entities_in_markdown(enr.summary_paragraph),
+                    'key_takeaways': key_takeaways,
                     'priority': int(getattr(enr, 'priority', 5)),
                     'enrichment_lm_log': lm_dict,
                 }, '$unset': {'enrich_lock': ""}}

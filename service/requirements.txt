@@ -9,3 +9,4 @@ requests
 rss-parser
 ddgs
 markitdown[all]
+spacy

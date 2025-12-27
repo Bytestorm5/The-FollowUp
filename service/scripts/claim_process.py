@@ -33,7 +33,6 @@ from util.mongo import normalize_dates as _normalize_dates
 from util import openai_batch as obatch
 from util.schema_outline import compact_outline_from_model
 from util.model_select import select_model, MODEL_TABLE
-
 logger = logging.getLogger(__name__)
 
 

@@ -29,6 +29,7 @@ jobs:
           source .venv/bin/activate
           python -m pip install --upgrade pip
           if [ -f service/requirements.txt ]; then pip install -r service/requirements.txt; fi
+          python -m spacy download en_core_web_sm
 
       - name: Run pipeline
         env:

@@ -23,6 +23,7 @@ load_dotenv(os.path.join(_REPO_ROOT, ".env"))
 from util import mongo
 from util.llm_web import run_with_search
 from util.model_select import MODEL_TABLE
+from util.spacy_ner import link_named_entities_in_markdown
 from models import MongoClaim, Date_Delta, SilverUpdate, MongoArticle, ModelResponseOutput, SilverFollowup, FactCheckResponseOutput
 
 try:
@@ -864,6 +865,10 @@ def main():
                         logger.exception('Failed to insert into silver_followups')
             except Exception:
                 logger.exception('Unexpected error while handling follow-up insertion')
+
+        # Annotate named entities in model_output.text if present
+        if isinstance(doc.get('model_output'), dict) and isinstance(doc['model_output'].get('text'), str):
+            doc['model_output']['text'] = link_named_entities_in_markdown(doc['model_output']['text'])
 
         try:
             silver_obj = SilverUpdate(**doc)
