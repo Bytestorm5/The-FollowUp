@@ -21,6 +21,7 @@ from models import ArticleEnrichment, MongoArticle, LMLogEntry
 from util import openai_batch as obatch
 from util.scrape_utils import playwright_get
 from util import locks as _locks
+from util.model_select import select_model, MODEL_TABLE
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,8 @@ def _needs_enrichment(doc: Dict[str, Any]) -> bool:
 def _fetch_url_text(url: str) -> str:
     if not url:
         return ""
+    # Basic fallback disabled; rely on MarkItDown above
+    return ""
 
 def _fetch_markdown(url: str, fallback_html_text: str = "") -> str:
     if not url:
@@ -101,14 +104,25 @@ def _enrich(article: Dict[str, Any], template: str) -> tuple[ArticleEnrichment |
     md_text = _get_article_markdown(article)
     user_body = _build_input(article, md_text)
     try:
-        resp = _OPENAI_CLIENT.responses.parse(
-            model=os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
-            input=[
+        # Select model/effort for enrichment (non-batch). Fallback to table [process][medium].
+        try:
+            model, effort = select_model('process', 'Enrich article into markdown, summary, key takeaways with strict schema.')
+        except Exception:
+            model, effort = MODEL_TABLE['process']['medium']
+        kwargs = {
+            "model": model,
+            "input": [
                 {"role": "system", "content": template},
                 {"role": "user", "content": user_body},
             ],
-            text_format=ArticleEnrichment,
-        )
+            "text_format": ArticleEnrichment,
+        }
+        if effort and effort != 'none':
+            try:
+                kwargs["reasoning"] = {"effort": effort}
+            except Exception:
+                pass
+        resp = _OPENAI_CLIENT.responses.parse(**kwargs)
         parsed = getattr(resp, 'output_parsed', None) or (resp.get('output_parsed') if isinstance(resp, dict) else None)
         if parsed is None:
             logger.error('No parsed output while enriching article %s', article.get('_id'))
@@ -147,7 +161,7 @@ def _enrich(article: Dict[str, Any], template: str) -> tuple[ArticleEnrichment |
                 api_type='responses',
                 call_id=str(call_id or ''),
                 called_from='scripts.enrich_articles._enrich',
-                model_name=os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
+                model_name=model,
                 system_tokens=0,
                 user_tokens=prompt_tokens,
                 response_tokens=completion_tokens,
@@ -253,8 +267,10 @@ def run(batch: int = 50):
         except Exception:
             md_by_id[str(d.get('_id'))] = d.get('raw_content', '') or ''
 
-    # Build batch requests
+    # Build batch requests (batch API cannot use select_model or reasoning)
     request_lines: List[Dict[str, Any]] = []
+    # Determine batch model: env override or static table default
+    batch_model = MODEL_TABLE['process']['medium'][0]
     for doc in docs:
         custom_id = str(doc.get('_id'))
         md_text = md_by_id.get(custom_id, '')
@@ -265,7 +281,7 @@ def run(batch: int = 50):
                 "method": "POST",
                 "url": "/v1/chat/completions",
                 "body": {
-                    "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
+                    "model": batch_model,
                     "messages": [
                         {"role": "system", "content": template},
                         {"role": "user", "content": user_body},
@@ -276,8 +292,8 @@ def run(batch: int = 50):
         )
 
     # Create and poll batch with shared utility
-    batch = obatch.create_batch(_OPENAI_CLIENT, request_lines, endpoint='/v1/chat/completions')
-    batch_id = getattr(batch, 'id', None) or batch.get('id')
+    batch_job = obatch.create_batch(_OPENAI_CLIENT, request_lines, endpoint='/v1/chat/completions')
+    batch_id = getattr(batch_job, 'id', None) or (batch_job.get('id') if isinstance(batch_job, dict) else None)
     if not batch_id:
         logger.error('Batch did not return an id; aborting')
         return

@@ -32,6 +32,7 @@ from util.slug import generate_unique_slug as _gen_slug
 from util.mongo import normalize_dates as _normalize_dates
 from util import openai_batch as obatch
 from util.schema_outline import compact_outline_from_model
+from util.model_select import select_model, MODEL_TABLE
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,7 @@ def _fallback_process_with_responses(
     schema: Dict[str, Any],
     schema_json: str,
     schema_outline: Optional[str] = None,
+    effort: Optional[str] = None,
 ):
     """Fallback path: process docs one-by-one using Responses.parse with structured output.
 
@@ -168,14 +170,21 @@ def _fallback_process_with_responses(
             lm_dict: Optional[dict] = None
             for attempt in range(1, max_retries + 1):
                 try:
-                    resp = _OPENAI_CLIENT.responses.parse(
-                        model=model,
-                        input=[
+                    kwargs = {
+                        "model": model,
+                        "input": [
                             {"role": "system", "content": sys_prompt},
                             {"role": "user", "content": user_content},
                         ],
-                        text_format=ClaimProcessingResult,
-                    )
+                        "text_format": ClaimProcessingResult,
+                    }
+                    # Attempt to include reasoning effort if supported
+                    if effort and effort != 'none':
+                        try:
+                            kwargs["reasoning"] = {"effort": effort}
+                        except Exception:
+                            pass
+                    resp = _OPENAI_CLIENT.responses.parse(**kwargs)
                     parsed = getattr(resp, 'output_parsed', None) or (
                         resp.get('output_parsed') if isinstance(resp, dict) else None
                     )
@@ -423,7 +432,13 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
     schema_json = json.dumps(schema, indent=2)
     schema_outline = compact_outline_from_model(ClaimProcessingResult)
 
-    model = os.environ.get('OPENAI_MODEL', 'gpt-5-nano')
+    # Batch API: do NOT use select_model. Use env override or static table default.
+    env_model = os.environ.get('OPENAI_MODEL')
+    if env_model and env_model.strip():
+        model = env_model.strip()
+    else:
+        # Default to process/medium mapping
+        model = MODEL_TABLE['process']['medium'][0]
     endpoint = '/v1/chat/completions'
     request_lines = _build_requests(docs, schema, schema_json, template, model=model, schema_outline=schema_outline)
 
@@ -442,7 +457,12 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
     # Poll until completed
     def _fallback():
         logger.warning('Batch polling timed out; falling back to Responses API for remaining items')
-        _fallback_process_with_responses(docs, template, model, schema, schema_json, schema_outline)
+        # Non-batch path may use select_model and reasoning effort
+        try:
+            fb_model, fb_effort = select_model('process', 'Extract 0-5 trackable claims from official government press releases with strict JSON schema output.')
+        except Exception:
+            fb_model, fb_effort = model, 'none'
+        _fallback_process_with_responses(docs, template, fb_model, schema, schema_json, schema_outline, fb_effort)
 
     finished = obatch.poll_batch_with_fallback(
         _OPENAI_CLIENT,

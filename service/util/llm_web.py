@@ -38,6 +38,7 @@ from util import mongo
 from util.mongo import normalize_dates as _normalize_dates
 from models import LMLogEntry
 from util.schema_outline import compact_outline_from_model
+from util.model_select import select_model, MODEL_TABLE
 logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 load_dotenv(os.path.join(_SERVICE_ROOT, ".env"))
@@ -582,16 +583,26 @@ In all matters, you must follow the stances and standards of The Follow Up News 
     - It is always critical of all parties operating in the government- trusting them only to do and say things that align with their incentives. The truth can only be expected when it aligns with their incentives.
  - Always present the facts as accurately as possible in good faith, even if inconvenient to the stances of The Follow Up.
  - The Follow Up primarily concerns itself with 
-The viewpoints and stances must be strictly adhered to, but do not need to be explicitly mentioned in your final output.
+The viewpoints and stances must be strictly adhered to, but do not need to be explicitly mentioned in your final output. Not all viewpoints need to be applied to every task; use judgment as to which are relevant.
 """
 
 def run_with_search(
     input_text: str,
-    model: str = "gpt-5-mini",
+    model: Optional[str] = None,
+    effort: Optional[str] = None,
     text_format: Optional[Union[type[BaseModel], BaseModel]]  = None,
     task_system: Optional[str] = None,
     tool_choices: Optional[ToolChoices] = None,
 ) -> SearchOutput:
+    # Validate model/effort pairing
+    if (model and not effort) or (effort and not model):
+        raise ValueError("Both 'model' and 'effort' must be provided together, or both omitted.")
+    # If both are omitted, use selector with fallback to [agent][medium]
+    if not model and not effort:
+        try:
+            model, effort = select_model('agent', input_text)
+        except Exception:
+            model, effort = MODEL_TABLE['agent']['medium']
     def _make_log_from_response(resp: Any) -> Optional[LMLogEntry]:
         try:
             call_id = getattr(resp, "id", None)
@@ -642,11 +653,18 @@ def run_with_search(
 
         # Main loop: always run WITHOUT structured parsing so tools can iterate freely
         for _ in range(max_turns):
-            response = _CLIENT.responses.create(  # type: ignore[arg-type]
-                model=model,
-                tools=tools,  # type: ignore[arg-type]
-                input=messages,  # type: ignore[arg-type]
-            )
+            # Attempt to include reasoning effort when supported
+            _kwargs: Dict[str, Any] = {
+                "model": model,
+                "tools": tools,  # type: ignore[arg-type]
+                "input": messages,  # type: ignore[arg-type]
+            }
+            if effort and effort != 'none':
+                try:
+                    _kwargs["reasoning"] = {"effort": effort}
+                except Exception:
+                    pass
+            response = _CLIENT.responses.create(**_kwargs)  # type: ignore[arg-type]
             last_response = response
             if primary_log is None:
                 primary_log = _make_log_from_response(response)
@@ -706,11 +724,17 @@ def run_with_search(
                         ),
                     }
                 ]
-                parse_resp = _CLIENT.responses.parse(
-                    model=model,
-                    input=parse_messages,  # type: ignore[arg-type]
-                    text_format=text_format,  # type: ignore[arg-type]
-                )
+                _pkwargs: Dict[str, Any] = {
+                    "model": model,
+                    "input": parse_messages,  # type: ignore[arg-type]
+                    "text_format": text_format,  # type: ignore[arg-type]
+                }
+                if effort and effort != 'none':
+                    try:
+                        _pkwargs["reasoning"] = {"effort": effort}
+                    except Exception:
+                        pass
+                parse_resp = _CLIENT.responses.parse(**_pkwargs)
                 parsed_obj = getattr(parse_resp, "output_parsed", None)
                 # Prefer a parse call log when parsing succeeds
                 pl = _make_log_from_response(parse_resp)
@@ -734,10 +758,16 @@ def run_with_search(
                 finalize_messages = list(messages) + [
                     {"role": "user", "content": "Provide the final answer now as text. Do not call tools."}
                 ]
-                finalize_resp = _CLIENT.responses.create(
-                    model=model,
-                    input=finalize_messages,  # type: ignore[arg-type]
-                )
+                _fkwargs: Dict[str, Any] = {
+                    "model": model,
+                    "input": finalize_messages,  # type: ignore[arg-type]
+                }
+                if effort and effort != 'none':
+                    try:
+                        _fkwargs["reasoning"] = {"effort": effort}
+                    except Exception:
+                        pass
+                finalize_resp = _CLIENT.responses.create(**_fkwargs)
                 messages += getattr(finalize_resp, "output", []) or []
                 final_text2 = _extract_response_text(finalize_resp)
                 # If finalize produced content, we can update log
@@ -760,11 +790,17 @@ def run_with_search(
                                 ),
                             }
                         ]
-                        parse_resp2 = _CLIENT.responses.parse(
-                            model=model,
-                            input=parse_messages2,  # type: ignore[arg-type]
-                            text_format=text_format,  # type: ignore[arg-type]
-                        )
+                        _p2kwargs: Dict[str, Any] = {
+                            "model": model,
+                            "input": parse_messages2,  # type: ignore[arg-type]
+                            "text_format": text_format,  # type: ignore[arg-type]
+                        }
+                        if effort and effort != 'none':
+                            try:
+                                _p2kwargs["reasoning"] = {"effort": effort}
+                            except Exception:
+                                pass
+                        parse_resp2 = _CLIENT.responses.parse(**_p2kwargs)
                         parsed2 = getattr(parse_resp2, "output_parsed", None)
                         pl2 = _make_log_from_response(parse_resp2)
                         if pl2 is not None:

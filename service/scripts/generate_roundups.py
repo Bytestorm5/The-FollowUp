@@ -12,6 +12,7 @@ if _SERVICE_ROOT not in sys.path:
 from util import mongo
 from util.slug import generate_unique_slug
 from util.llm_web import run_with_search, ToolSet
+from util.model_select import MODEL_TABLE
 from util.timezone import pipeline_today
 from models import SilverRoundup, RoundupSeedArticle, RoundupResponseOutput
 
@@ -233,13 +234,24 @@ def _generate_roundup(rtype: str, start: datetime.date, end: datetime.date, temp
     )
 
     try:
-        out = run_with_search(
-            user_prompt,
-            model=os.environ.get('OPENAI_MODEL', 'gpt-5-mini'),
-            text_format=RoundupResponseOutput,
-            task_system=template,
-            tool_choices=[ToolSet.WEB_SEARCH, ToolSet.NEWS_SEARCH, ToolSet.INTERNAL_SEARCH],
-        )
+        # Yearly: force [agent][high] with high reasoning effort. Others: defer to select_model.
+        if rtype == 'yearly':
+            agent_high_model, agent_high_effort = MODEL_TABLE['agent']['high']
+            out = run_with_search(
+                user_prompt,
+                model=agent_high_model,
+                effort=agent_high_effort,
+                text_format=RoundupResponseOutput,
+                task_system=template,
+                tool_choices=[ToolSet.WEB_SEARCH, ToolSet.NEWS_SEARCH, ToolSet.INTERNAL_SEARCH],
+            )
+        else:
+            out = run_with_search(
+                user_prompt,
+                text_format=RoundupResponseOutput,
+                task_system=template,
+                tool_choices=[ToolSet.WEB_SEARCH, ToolSet.NEWS_SEARCH, ToolSet.INTERNAL_SEARCH],
+            )
     except Exception:
         logger.exception('LLM call failed for roundup %s %s..%s', rtype, start, end)
         return None

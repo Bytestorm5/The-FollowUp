@@ -22,6 +22,7 @@ load_dotenv(os.path.join(_REPO_ROOT, ".env"))
 
 from util import mongo
 from util.llm_web import run_with_search
+from util.model_select import MODEL_TABLE
 from models import MongoClaim, Date_Delta, SilverUpdate, MongoArticle, ModelResponseOutput, SilverFollowup, FactCheckResponseOutput
 
 try:
@@ -122,12 +123,12 @@ def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str,
 
         if update_type == UpdateType.ENDPOINT:
             tpl = endpoint_tpl
-            # Use a slightly stronger model for endpoint assessments unless overridden
-            model_for_req = os.environ.get('OPENAI_MODEL_ENDPOINT', os.environ.get('OPENAI_MODEL', 'gpt-5-mini'))
+            # Use agent/medium by default for endpoint assessments
+            model_for_req, effort_for_req = MODEL_TABLE['agent']['medium']
         elif update_type == UpdateType.REGULAR_INTERVAL:
             tpl = regular_tpl
-            # Switch regular check-ins to nano as requested
-            model_for_req = 'gpt-5-nano'
+            # Regular check-ins: agent/low
+            model_for_req, effort_for_req = MODEL_TABLE['agent']['low']
         else:
             logger.info(f'No update needed for claim {raw.get("_id")} ("{claim.completion_condition}"); skipping')
             continue
@@ -158,6 +159,7 @@ def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str,
         req = {
             "custom_id": str(custom_id),
             "model": model_for_req,
+            "effort": effort_for_req,
             "input": content,
             "system": tpl.strip(),
         }
@@ -446,7 +448,9 @@ def main():
         content = "\n".join(content_parts)
         req = {
             "custom_id": str(custom_id),
-            "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
+            # Goals: treat as regular check-ins → agent/low
+            "model": MODEL_TABLE['agent']['low'][0],
+            "effort": MODEL_TABLE['agent']['low'][1],
             "input": content,
             "system": regular_checkin_template.strip(),
         }
@@ -659,6 +663,7 @@ def main():
             update_type = None
 
         model = req.get('model')
+        effort = req.get('effort')
         content_str = req.get('input', '')
         task_system = req.get('system', '')
         # Determine if this request is a fact check (statement) up-front
@@ -674,7 +679,13 @@ def main():
             # Choose schema based on custom id (statements use fact check schema)
             schema = FactCheckResponseOutput if is_factcheck else ModelResponseOutput
 
-            run_res = run_with_search(content_str, model=model, text_format=schema, task_system=task_system)
+            if model and effort:
+                run_res = run_with_search(content_str, model=model, effort=effort, text_format=schema, task_system=task_system)
+            elif not model and not effort:
+                # Defer to selector inside run_with_search
+                run_res = run_with_search(content_str, text_format=schema, task_system=task_system)
+            else:
+                raise ValueError("Invalid request config: model/effort must be both present or both omitted")
             model_text = (run_res.text or '').strip()
             parsed_obj = getattr(run_res, 'parsed', None)
             try:
