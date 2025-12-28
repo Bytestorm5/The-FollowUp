@@ -3,7 +3,7 @@
 import os
 import sys
 import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
 import requests
 import logging
@@ -250,7 +250,7 @@ def iter_scrape(
     return LinkAggregationResult.from_steps(results)
 
 
-def playwright_get(url: str, timeout: int = 20, headers: Optional[Dict[str, str]] = None):
+def playwright_get(url: str, timeout: int = 20, headers: Optional[Dict[str, str]] = None, try_requests: Literal['first', 'last', 'dont', 'default'] = 'default'):
     """Try a few requests header profiles, then fall back to Playwright to render JS.
 
     Returns an object with `.content` (bytes), `.status_code` and `.raise_for_status()`.
@@ -264,52 +264,69 @@ def playwright_get(url: str, timeout: int = 20, headers: Optional[Dict[str, str]
     if headers:
         hdrs.update(headers)
 
-    session = requests.Session()
-    retry_strategy = Retry(total=2, backoff_factor=0.5, status_forcelist=(429, 500, 502, 503, 504), allowed_methods=("GET",), raise_on_status=False)
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
+    if try_requests == 'default':
+        playwright_domains = [
+            "state.gov"
+        ]
+        try_requests = 'first' if any(x in url for x in playwright_domains) else 'last'
+    
+    # Define request logic
+    def _try_requests():
+        session = requests.Session()
+        retry_strategy = Retry(total=2, backoff_factor=0.5, status_forcelist=(429, 500, 502, 503, 504), allowed_methods=("GET",), raise_on_status=False)
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        profiles = [{}, hdrs, {"User-Agent": "PostmanRuntime/7.32.4"}, {"User-Agent": hdrs["User-Agent"], "Accept-Language": "en-US,en;q=0.9"}]
+        last_exc = None
+        for prof in profiles:
+            try:
+                resp = session.get(url, headers=prof, timeout=(5, timeout), allow_redirects=True)
+                logger.info("playwright_get: tried requests profile=%s status=%s url=%s", prof.get("User-Agent"), getattr(resp, "status_code", None), url)
+                if getattr(resp, "status_code", None) and resp.status_code != 403:
+                    resp.raise_for_status()
+                    return resp
+                last_exc = resp
+            except requests.RequestException as e:
+                logger.warning("playwright_get: requests profile failed %s: %s", prof.get("User-Agent"), e)
+                last_exc = e
+        return last_exc
 
-    profiles = [{}, hdrs, {"User-Agent": "PostmanRuntime/7.32.4"}, {"User-Agent": hdrs["User-Agent"], "Accept-Language": "en-US,en;q=0.9"}]
-
-    last_exc = None
-    for prof in profiles:
-        try:
-            resp = session.get(url, headers=prof, timeout=(5, timeout), allow_redirects=True)
-            logger.info("playwright_get: tried requests profile=%s status=%s url=%s", prof.get("User-Agent"), getattr(resp, "status_code", None), url)
-            # If we got a non-403 status, assume it's fine
-            if getattr(resp, "status_code", None) and resp.status_code != 403:
-                resp.raise_for_status()
-                return resp
-            last_exc = resp
-        except requests.RequestException as e:
-            logger.warning("playwright_get: requests profile failed %s: %s", prof.get("User-Agent"), e)
-            last_exc = e
-
-    # If we reach here, either we got a 403 or all requests attempts failed.
-    if sync_playwright is None:
-        raise RuntimeError("playwright_get: requests failed/403 and Playwright is not installed; install with `pip install playwright` and run `python -m playwright install chromium`")
-
-    try:
+    # Define Playwright logic
+    def _do_playwright():
+        if sync_playwright is None:
+            raise RuntimeError("playwright_get: Playwright is not installed; install with `pip install playwright` and run `python -m playwright install chromium`")
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
-            # set headers
             page.set_extra_http_headers({k.lower(): v for k, v in hdrs.items()})
             page.goto(url, wait_until="networkidle", timeout=20000)
             html = page.content()
             browser.close()
+        class _Resp:
+            def __init__(self, text: str):
+                self.content = text.encode("utf-8")
+                self.status_code = 200
+            def raise_for_status(self):
+                return None
+        logger.info("playwright_get: fetched with Playwright %s", url)
+        return _Resp(html)
 
-            class _Resp:
-                def __init__(self, text: str):
-                    self.content = text.encode("utf-8")
-                    self.status_code = 200
-
-                def raise_for_status(self):
-                    return None
-
-            logger.info("playwright_get: fetched with Playwright %s", url)
-            return _Resp(html)
-    except Exception as e:
-        logger.exception("playwright_get: Playwright fetch failed for %s", url)
-        raise
+    # Control flow based on try_requests
+    if try_requests == 'first':
+        result = _try_requests()
+        if hasattr(result, 'status_code'):
+            return result
+        return _do_playwright()
+    elif try_requests == 'last':
+        try:
+            return _do_playwright()
+        except Exception:
+            result = _try_requests()
+            if hasattr(result, 'status_code'):
+                return result
+            raise RuntimeError(f"playwright_get: both Playwright and requests failed; last exception={result}")
+    elif try_requests == 'dont':
+        return _do_playwright()
+    else:
+        raise ValueError(f"playwright_get: invalid try_requests value: {try_requests}")
