@@ -127,6 +127,8 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
       return null;
     }
   })();
+  const followUpQuestions = Array.isArray((doc as any).follow_up_questions) ? (doc as any).follow_up_questions : [];
+  const followUpAnswers = Array.isArray((doc as any).follow_up_answers) ? (doc as any).follow_up_answers : [];
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
@@ -232,6 +234,54 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
                 </li>
               ))}
             </ul>
+          </section>
+        )}
+
+        {(followUpAnswers.length > 0 || followUpQuestions.length > 0) && (
+          <section className="mt-8">
+            <h2 className="text-lg font-semibold">Follow Up Questions</h2>
+            {followUpAnswers.length > 0 ? (
+              <div className="mt-3 space-y-4">
+                {followUpAnswers.map((ans: any, idx: number) => (
+                  <div key={ans.index ?? idx} className="rounded-md border p-4">
+                    <p className="text-sm font-semibold">
+                      {ans.question || `Question ${typeof ans.index === "number" ? ans.index + 1 : idx + 1}`}
+                    </p>
+                    <div className="prose prose-sm prose-neutral mt-2 max-w-none">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({ href, children }) => <a href={href ?? ""} className="underline" target="_blank" rel="noreferrer">{children}</a>,
+                          p: ({ children }) => <p className="my-1">{children}</p>,
+                        }}
+                      >
+                        {ans.text || ""}
+                      </ReactMarkdown>
+                    </div>
+                    {Array.isArray(ans.sources) && ans.sources.length > 0 && (
+                      <div className="mt-3">
+                        <div className="text-xs font-semibold uppercase text-foreground/60">Sources</div>
+                        <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
+                          {ans.sources.map((s: string, i: number) => (
+                            <li key={i}>
+                              <a href={s} target="_blank" rel="noreferrer" className="underline break-words">
+                                {s}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <ul className="mt-3 list-disc space-y-2 pl-6 text-sm">
+                {followUpQuestions.map((q: string, i: number) => (
+                  <li key={i}>{q}</li>
+                ))}
+              </ul>
+            )}
           </section>
         )}
         {/* <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">

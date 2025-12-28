@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run pipeline: scrape_all -> claim_process -> update_promises
+"""Run pipeline: scrape_all -> enrich_articles -> answer_followups -> claim_process -> update_promises -> generate_roundups
 
 Usage:
   python run_pipeline.py [--dry-run] [--stop-on-error]
@@ -61,6 +61,7 @@ def main() -> int:
     scripts = [
         scripts_dir / "scrape_all.py",
         scripts_dir / "enrich_articles.py",
+        scripts_dir / "answer_followups.py",
         scripts_dir / "claim_process.py",
         scripts_dir / "update_promises.py",
         scripts_dir / "generate_roundups.py",

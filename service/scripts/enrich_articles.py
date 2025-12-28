@@ -23,7 +23,7 @@ from util import openai_batch as obatch
 from util.scrape_utils import playwright_get
 from util import locks as _locks
 from util.model_select import select_model, MODEL_TABLE
-from util.spacy_ner import link_named_entities_in_markdown
+from util.spacy_ner import extract_entity_counts, link_named_entities_in_markdown
 logger = logging.getLogger(__name__)
 
 _OPENAI_CLIENT = OpenAI()
@@ -38,17 +38,28 @@ def _load_template() -> str:
         return fh.read()
 
 
-def _build_input(article: Dict[str, Any], markdown: str) -> str:
+def _build_input(article: Dict[str, Any], markdown: str, entities: Dict[str, int]) -> str:
     title = article.get('title', '')
     date = article.get('date', '')
     link = article.get('link', '')
     tags = ','.join(article.get('tags', []) or [])
-    body = f"Title: {title}\nDate: {date}\nTags: {tags}\nSource: {link}\n\nSource Content (markdown):\n{markdown}"
+    ent_items = list(entities.items())[:50]
+    entities_lines = "\n".join([f"- {k}: {v}" for k, v in ent_items]) if ent_items else "None detected"
+    body = (
+        f"Title: {title}\nDate: {date}\nTags: {tags}\nSource: {link}"
+        f"\n\nNamed Entities (occurrence counts from the original text):\n{entities_lines}"
+        f"\n\nSource Content (markdown):\n{markdown}"
+    )
     return body
 
 
 def _needs_enrichment(doc: Dict[str, Any]) -> bool:
-    return not (doc.get('clean_markdown') and doc.get('summary_paragraph') and doc.get('key_takeaways'))
+    if not (doc.get('clean_markdown') and doc.get('summary_paragraph') and doc.get('key_takeaways')):
+        return True
+    for field in ('follow_up_questions', 'follow_up_question_groups', 'entities'):
+        if field not in doc:
+            return True
+    return False
 
 
 def _fetch_url_text(url: str) -> str:
@@ -105,9 +116,44 @@ def _get_article_markdown(article: Dict[str, Any]) -> str:
         return ""
 
 
-def _enrich(article: Dict[str, Any], template: str) -> tuple[ArticleEnrichment | None, dict | None]:
+def _normalize_question_groups(groups: Any, question_count: int) -> List[List[int]]:
+    """
+    Normalize follow_up_question_groups into a list of int lists.
+    Supports literal shortcuts "single" (all questions grouped together)
+    and "individual" (one group per question).
+    """
+    if isinstance(groups, str):
+        val = groups.strip().lower()
+        if val == 'single':
+            return [list(range(question_count))] if question_count else []
+        if val == 'individual':
+            return [[i] for i in range(question_count)]
+
+    normalized: List[List[int]] = []
+    if isinstance(groups, (list, tuple)):
+        for group in groups:
+            if not isinstance(group, (list, tuple)):
+                continue
+            cleaned_set: set[int] = set()
+            for i in group:
+                if isinstance(i, bool):
+                    continue
+                try:
+                    idx = int(i)
+                except Exception:
+                    continue
+                if 0 <= idx < question_count:
+                    cleaned_set.add(idx)
+            cleaned = sorted(cleaned_set)
+            if cleaned:
+                normalized.append(list(cleaned))
+    return normalized
+
+
+def _enrich(article: Dict[str, Any], template: str) -> tuple[ArticleEnrichment | None, dict | None, str, Dict[str, int]]:
     md_text = _get_article_markdown(article)
-    user_body = _build_input(article, md_text)
+    entities = extract_entity_counts(md_text)
+    user_body = _build_input(article, md_text, entities)
     try:
         # Select model/effort for enrichment (non-batch). Fallback to table [process][medium].
         try:
@@ -131,7 +177,7 @@ def _enrich(article: Dict[str, Any], template: str) -> tuple[ArticleEnrichment |
         parsed = getattr(resp, 'output_parsed', None) or (resp.get('output_parsed') if isinstance(resp, dict) else None)
         if parsed is None:
             logger.error('No parsed output while enriching article %s', article.get('_id'))
-            return None, None
+            return None, None, md_text, entities
         if not isinstance(parsed, ArticleEnrichment):
             # pydantic v1 compatibility: attempt coercion
             try:
@@ -141,7 +187,7 @@ def _enrich(article: Dict[str, Any], template: str) -> tuple[ArticleEnrichment |
                     parsed = ArticleEnrichment.parse_obj(parsed)  # type: ignore[attr-defined]
             except Exception:
                 logger.exception('Failed to coerce parsed enrichment for article %s', article.get('_id'))
-                return None, None
+                return None, None, md_text, entities
         # Overwrite LLM-derived clean_markdown with deterministic MarkItDown result
         try:
             parsed.clean_markdown = md_text
@@ -174,26 +220,32 @@ def _enrich(article: Dict[str, Any], template: str) -> tuple[ArticleEnrichment |
             lm_dict = lm.model_dump() if hasattr(lm, 'model_dump') else lm.dict()
         except Exception:
             lm_dict = None
-        return parsed, lm_dict
+        return parsed, lm_dict, md_text, entities
     except Exception:
         logger.exception('OpenAI enrichment failed for article %s', article.get('_id'))
-        return None, None
+        return None, None, md_text, entities
 
 
 def _fallback_enrich(docs: list[Dict[str, Any]], template: str) -> None:
     for art in docs:
         try:
-            enr, lm_dict = _enrich(art, template)
+            enr, lm_dict, md_text, entities = _enrich(art, template)
             if enr is None:
                 continue
             key_takeaways = list(enr.key_takeaways or [])
             key_takeaways = [link_named_entities_in_markdown(kt) for kt in key_takeaways]
+            questions = list(getattr(enr, 'follow_up_questions', []) or [])
+            groups_raw = getattr(enr, 'follow_up_question_groups', []) or []
+            question_groups = _normalize_question_groups(groups_raw, len(questions))
             update = {
                 '$set': {
-                    'clean_markdown': link_named_entities_in_markdown(enr.clean_markdown),
+                    'clean_markdown': link_named_entities_in_markdown(md_text or enr.clean_markdown),
                     'summary_paragraph': link_named_entities_in_markdown(enr.summary_paragraph),
                     'key_takeaways': key_takeaways,
                     'priority': int(getattr(enr, 'priority', 5)),
+                    'follow_up_questions': questions,
+                    'follow_up_question_groups': question_groups,
+                    'entities': entities or {},
                     'enrichment_lm_log': lm_dict,
                 }
             }
@@ -219,6 +271,11 @@ def run(batch: int = 50):
                         'clean_markdown': 1,
                         'summary_paragraph': 1,
                         'key_takeaways': 1,
+                        'follow_up_questions': 1,
+                        'follow_up_question_groups': 1,
+                        'entities': 1,
+                        'follow_up_answers': 1,
+                        'follow_up_answers_lm_log': 1,
                     }
                 }
             )
@@ -236,6 +293,9 @@ def run(batch: int = 50):
             {'clean_markdown': {'$exists': False}},
             {'summary_paragraph': {'$exists': False}},
             {'key_takeaways': {'$exists': False}},
+            {'follow_up_questions': {'$exists': False}},
+            {'follow_up_question_groups': {'$exists': False}},
+            {'entities': {'$exists': False}},
         ]
     }).sort('inserted_at', 1)
 
@@ -268,11 +328,15 @@ def run(batch: int = 50):
 
     # Precompute markdown per doc to avoid duplicate fetching and to store deterministically
     md_by_id: Dict[str, str] = {}
+    entities_by_id: Dict[str, Dict[str, int]] = {}
     for d in docs:
         try:
-            md_by_id[str(d.get('_id'))] = _get_article_markdown(d)
+            md_text = _get_article_markdown(d)
+            md_by_id[str(d.get('_id'))] = md_text
+            entities_by_id[str(d.get('_id'))] = extract_entity_counts(md_text)
         except Exception:
             md_by_id[str(d.get('_id'))] = d.get('raw_content', '') or ''
+            entities_by_id[str(d.get('_id'))] = {}
 
     # Build batch requests (batch API cannot use select_model or reasoning)
     request_lines: List[Dict[str, Any]] = []
@@ -281,7 +345,7 @@ def run(batch: int = 50):
     for doc in docs:
         custom_id = str(doc.get('_id'))
         md_text = md_by_id.get(custom_id, '')
-        user_body = _build_input(doc, md_text)
+        user_body = _build_input(doc, md_text, entities_by_id.get(custom_id, {}))
         request_lines.append(
             {
                 "custom_id": custom_id,
@@ -369,6 +433,9 @@ def run(batch: int = 50):
             except Exception:
                 lm_dict = None
             key_takeaways = [link_named_entities_in_markdown(kt) for kt in (enr.key_takeaways or [])]
+            questions = list(getattr(enr, 'follow_up_questions', []) or [])
+            groups_raw = getattr(enr, 'follow_up_question_groups', []) or []
+            question_groups = _normalize_question_groups(groups_raw, len(questions))
             mongo.bronze_links.update_one(
                 {'_id': docs_by_id[custom_id]['_id']},
                 {'$set': {
@@ -377,6 +444,9 @@ def run(batch: int = 50):
                     'summary_paragraph': link_named_entities_in_markdown(enr.summary_paragraph),
                     'key_takeaways': key_takeaways,
                     'priority': int(getattr(enr, 'priority', 5)),
+                    'follow_up_questions': questions,
+                    'follow_up_question_groups': question_groups,
+                    'entities': entities_by_id.get(custom_id, {}),
                     'enrichment_lm_log': lm_dict,
                 }, '$unset': {'enrich_lock': ""}}
             )

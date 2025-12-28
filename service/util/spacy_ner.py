@@ -286,3 +286,41 @@ def link_named_entities_in_markdown(
             )
 
     return "".join(out_parts)
+
+
+def extract_entity_counts(
+    md: str,
+    *,
+    nlp=NLP,
+    allowed_labels: Optional[set] = None,
+) -> dict[str, int]:
+    """
+    Return a mapping of entity text -> occurrence count using spaCy NER.
+
+    The markdown is lightly cleaned to drop link syntax while keeping the text.
+    Entity keys are taken from the first occurrence of each normalized term.
+    Results are sorted by descending count for stability.
+    """
+    allowed = allowed_labels or (DEFAULT_ENTITY_LABELS | {"ORG"})
+    text = md or ""
+    # Strip markdown link syntax while retaining the visible text.
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"`+", " ", text)
+
+    doc = nlp(text)
+    counts: dict[str, tuple[str, int]] = {}
+    for ent in doc.ents:
+        if ent.label_ not in allowed:
+            continue
+        raw = ent.text.strip()
+        if len(raw) < 2:
+            continue
+        key = normalize_term(raw)
+        if not key:
+            continue
+        display, prev_count = counts.get(key, (raw, 0))
+        counts[key] = (display, prev_count + 1)
+
+    # Collapse to display text -> count, sorted for determinism
+    out: dict[str, int] = {display: c for display, c in counts.values()}
+    return dict(sorted(out.items(), key=lambda kv: (-kv[1], kv[0].casefold())))

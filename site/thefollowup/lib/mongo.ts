@@ -43,6 +43,15 @@ export interface BronzeLink {
   summary_paragraph?: string | null;
   key_takeaways?: string[] | null;
   priority?: number | null;
+  entities?: Record<string, number> | null;
+  follow_up_questions?: string[] | null;
+  follow_up_question_groups?: number[][] | null;
+  follow_up_answers?: {
+    index: number;
+    question: string;
+    text: string;
+    sources?: string[];
+  }[] | null;
 }
 
 export async function getBronzeCollection(): Promise<Collection<BronzeLink>> {
