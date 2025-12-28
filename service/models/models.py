@@ -1,7 +1,11 @@
-from typing import List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, Field
 import datetime
 from bson import ObjectId
+try:  # Pydantic v2
+    from pydantic import RootModel
+except Exception:  # pragma: no cover
+    RootModel = None
 
 class ArticleLink(BaseModel):
     title: str = Field(..., description="Title of the news article")
@@ -179,11 +183,34 @@ class ClaimProcessingResult(BaseModel):
         return cls(steps=steps)    
 
 
+class FollowupAnswer(BaseModel):
+    text: str = Field(..., description="Concise answer to the question")
+    sources: List[str] = Field(default_factory=list, description="List of source URLs used for this answer")
+
+
+if RootModel:
+    class FollowupAnswerMap(RootModel[Dict[int, FollowupAnswer]]):  # type: ignore[type-arg]
+        root: Dict[int, FollowupAnswer]
+else:  # pragma: no cover
+    class FollowupAnswerMap(BaseModel):
+        __root__: Dict[int, FollowupAnswer]
+
+    def _get_root(self) -> Dict[int, FollowupAnswer]:
+        return getattr(self, "root", None) or getattr(self, "__root__", {})  # type: ignore[attr-defined]
+    FollowupAnswerMap.root = property(_get_root)  # type: ignore[attr-defined]
+
+
 class ArticleEnrichment(BaseModel):
     clean_markdown: str = Field(..., description="Verbatim clean text formatted as Markdown")
     summary_paragraph: str = Field(..., description="A concise one-paragraph summary")
     key_takeaways: List[str] = Field(..., description="Bullet point key takeaways")
     priority: Literal[5, 4, 3, 2, 1] = Field(..., description="Priority 1..5 where 1=Active Emergency, 2=Breaking News, 3=Important News, 4=Niche News, 5=Operational Updates")
+    follow_up_questions: List[str] = Field(..., description="Follow-up questions that would help a layperson understand jargon, organizations, or context in the article")
+    follow_up_question_groups: Union[List[List[int]], Literal['single', 'individual']] = Field(
+        ...,
+        description="Grouping of related follow-up questions using 0-based indexes into follow_up_questions. "
+                    "'single' means all questions belong to one group; 'individual' means one group per question.",
+    )
     
     
 class MongoClaim(BaseModel):
