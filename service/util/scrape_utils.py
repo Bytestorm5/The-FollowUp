@@ -268,7 +268,7 @@ def playwright_get(url: str, timeout: int = 20, headers: Optional[Dict[str, str]
         playwright_domains = [
             "state.gov"
         ]
-        try_requests = 'first' if any(x in url for x in playwright_domains) else 'last'
+        try_requests = 'last' if any(x in url for x in playwright_domains) else 'first'
     
     # Define request logic
     def _try_requests():
