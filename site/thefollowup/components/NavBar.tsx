@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 
 export default function NavBar() {
   const [open, setOpen] = useState(false);
@@ -64,6 +65,31 @@ export default function NavBar() {
             </svg>
             {/* <span>Search</span> */}
           </Link>
+
+          <div className="ml-auto flex items-center gap-3">
+            <SignedOut>
+              <div className="flex items-center gap-2">
+                <SignInButton mode="modal" redirectUrl="/account">
+                  <button className="rounded-full border border-[var(--color-border)] px-3 py-1 text-xs font-medium transition hover:bg-black/5">
+                    Sign in
+                  </button>
+                </SignInButton>
+                <SignUpButton mode="modal" redirectUrl="/account">
+                  <button className="rounded-full bg-primary/90 px-3 py-1 text-xs font-semibold text-white transition hover:bg-primary">
+                    Create account
+                  </button>
+                </SignUpButton>
+              </div>
+            </SignedOut>
+            <SignedIn>
+              <div className="flex items-center gap-2">
+                <Link href="/account" className="text-sm font-medium text-foreground hover:opacity-80">
+                  Account
+                </Link>
+                <UserButton afterSignOutUrl="/" />
+              </div>
+            </SignedIn>
+          </div>
         </nav>
       </div>
 
@@ -98,6 +124,28 @@ export default function NavBar() {
           <Link href="/about" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Mission</Link>
           <Link href="/about/statistics" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Statistics</Link>
           <Link href="/about/methodology" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Methodology</Link>
+          <SignedOut>
+            <div className="mt-4 flex flex-col gap-2 border-t border-[var(--color-border)] pt-4">
+              <SignInButton mode="modal" redirectUrl="/account">
+                <button className="rounded border border-[var(--color-border)] px-3 py-2 text-left text-sm font-medium hover:bg-black/5">
+                  Sign in to save your place
+                </button>
+              </SignInButton>
+              <SignUpButton mode="modal" redirectUrl="/account">
+                <button className="rounded bg-primary/90 px-3 py-2 text-left text-sm font-semibold text-white hover:bg-primary">
+                  Create an account
+                </button>
+              </SignUpButton>
+            </div>
+          </SignedOut>
+          <SignedIn>
+            <div className="mt-4 flex items-center justify-between gap-2 rounded border border-[var(--color-border)] px-3 py-2">
+              <Link href="/account" className="text-sm font-medium text-foreground hover:opacity-80" onClick={() => setOpen(false)}>
+                Account
+              </Link>
+              <UserButton afterSignOutUrl="/" />
+            </div>
+          </SignedIn>
         </nav>
       </aside>
     </header>
