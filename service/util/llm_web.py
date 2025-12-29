@@ -505,7 +505,7 @@ def _tool_defs(choices: Optional[ToolChoices] = None):
                     "start_date": {"type": ["string", "null"], "description": "Earliest article/claim date (YYYY-MM-DD)"},
                     "end_date": {"type": ["string", "null"], "description": "Latest article/claim date (YYYY-MM-DD)"},
                 },
-                "required": ["query", "max_articles", "max_claims"],
+                "required": ["query", "max_articles", "max_claims", "start_date", "end_date"],
                 "additionalProperties": False,
             },
         })
