@@ -153,7 +153,8 @@ def run(batch: int = 10) -> None:
             {'follow_up_answers': None},
         ]
     }
-    candidates = coll.find(query).sort('inserted_at', 1)
+    # Process newest articles first so fresh scrapes get answered in the same pipeline run
+    candidates = coll.find(query).sort('inserted_at', -1)
 
     docs: List[Dict[str, Any]] = []
     owner = os.environ.get('HOSTNAME') or f"pid-{os.getpid()}"

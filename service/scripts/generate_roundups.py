@@ -19,7 +19,8 @@ from models import SilverRoundup, RoundupSeedArticle, RoundupResponseOutput
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-CUTOFF_DATE = datetime.date(2025, 12, 15)
+# Skip generating extremely old periods; allow current dates to proceed
+CUTOFF_DATE = datetime.date(2023, 1, 1)
 
 
 def _prev_day(today: datetime.date) -> Tuple[datetime.date, datetime.date]:

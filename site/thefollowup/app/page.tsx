@@ -3,6 +3,14 @@ import Countdown from "@/components/Countdown";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsCollection, getSilverRoundupsCollection, type BronzeLink, type SilverClaim, type SilverFollowup, ObjectId, type SilverRoundupDoc } from "@/lib/mongo";
 import AdsenseAd from "@/components/AdSenseAd";
 
+function stripMarkdownLinks(text?: string | null): string {
+  if (!text) return "";
+  // Remove markdown links while keeping anchor text
+  return text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/<a[^>]*>(.*?)<\/a>/gi, "$1");
+}
+
 async function pickHeroAndMediumsByHeuristic(items: BronzeLink[], claimsColl: Awaited<ReturnType<typeof getSilverClaimsCollection>>, maxMediums = 6) {
   if (!items || items.length === 0) return { hero: undefined as any, mediums: [] as BronzeLink[] };
 
@@ -174,7 +182,7 @@ export default async function Home() {
                   </Link>
                 </h2>
                 {hero.summary_paragraph && (
-                  <p className="mt-3 text-foreground/80 text-base">{hero.summary_paragraph}</p>
+                  <p className="mt-3 text-foreground/80 text-base">{stripMarkdownLinks(hero.summary_paragraph)}</p>
                 )}
               </article>
             )}
@@ -205,7 +213,7 @@ export default async function Home() {
                       </Link>
                     </h3>
                     {m.summary_paragraph && (
-                      <p className="mt-2 line-clamp-3 text-sm text-foreground/80">{m.summary_paragraph}</p>
+                      <p className="mt-2 line-clamp-3 text-sm text-foreground/80">{stripMarkdownLinks(m.summary_paragraph)}</p>
                     )}
                   </article>
                 ))}
