@@ -188,17 +188,8 @@ class FollowupAnswer(BaseModel):
     sources: List[str] = Field(default_factory=list, description="List of source URLs used for this answer")
 
 
-if RootModel:
-    class FollowupAnswerMap(RootModel[Dict[int, FollowupAnswer]]):  # type: ignore[type-arg]
-        root: Dict[int, FollowupAnswer]
-else:  # pragma: no cover
-    class FollowupAnswerMap(BaseModel):
-        __root__: Dict[int, FollowupAnswer]
-
-    def _get_root(self) -> Dict[int, FollowupAnswer]:
-        return getattr(self, "root", None) or getattr(self, "__root__", {})  # type: ignore[attr-defined]
-    FollowupAnswerMap.root = property(_get_root)  # type: ignore[attr-defined]
-
+class FollowupAnswerMap(RootModel[Dict[int, FollowupAnswer]]):  # type: ignore[type-arg]
+    mapping: Dict[int, FollowupAnswer]
 
 class ArticleEnrichment(BaseModel):
     clean_markdown: str = Field(..., description="Verbatim clean text formatted as Markdown")
