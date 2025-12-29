@@ -13,7 +13,13 @@ _SERVICE_ROOT = os.path.abspath(os.path.join(_HERE, '..'))
 if _SERVICE_ROOT not in sys.path:
     sys.path.insert(0, _SERVICE_ROOT)
 
-from models import FollowupAnswer, FollowupAnswerMap, LMLogEntry  # noqa: E402
+from models import (
+    FollowupAnswer,
+    FollowupAnswerMap,
+    FollowupAnswerItem,
+    FollowupAnswersList,
+    LMLogEntry,
+)  # noqa: E402
 from util import locks as _locks  # noqa: E402
 from util import mongo  # noqa: E402
 from util.llm_web import run_with_search  # noqa: E402
@@ -68,7 +74,7 @@ def _build_prompt(article: Dict[str, Any], questions: List[str], groups: List[Li
     groups_block = ", ".join([str(g) for g in groups]) if groups else "[]"
     schema_hint = ""
     try:
-        schema_hint = compact_outline_from_model(FollowupAnswerMap)
+        schema_hint = compact_outline_from_model(FollowupAnswersList)
     except Exception:
         pass
     return (
@@ -81,7 +87,8 @@ def _build_prompt(article: Dict[str, Any], questions: List[str], groups: List[Li
         "- Reuse research across grouped questions to keep answers consistent.\n"
         "- If a question is unanswerable with available information, say so concisely and leave sources empty.\n\n"
         "Structured output required:\n"
-        "A JSON object keyed by the question index (0-based). Each value must include:\n"
+        "JSON with an 'answers' array. Each item must include:\n"
+        "  - index: 0-based question index\n"
         '  - text: concise answer\n'
         '  - sources: list of URLs backing the answer\n'
         f"{schema_hint}"
@@ -101,6 +108,20 @@ def _build_prompt(article: Dict[str, Any], questions: List[str], groups: List[Li
 def _coerce_answers_map(data: Any) -> Dict[int, FollowupAnswer]:
     if isinstance(data, FollowupAnswerMap):
         raw_map = getattr(data, "root", None) or getattr(data, "__root__", {})  # type: ignore[attr-defined]
+    elif isinstance(data, FollowupAnswersList):
+        out_l: Dict[int, FollowupAnswer] = {}
+        try:
+            items = getattr(data, "answers", [])
+            for it in items or []:
+                try:
+                    idx = int(getattr(it, "index"))
+                    ans = FollowupAnswer(text=getattr(it, "text"), sources=list(getattr(it, "sources", []) or []))
+                except Exception:
+                    continue
+                out_l[idx] = ans
+        except Exception:
+            pass
+        return out_l
     else:
         raw_map = data
     if not isinstance(raw_map, dict):
@@ -179,12 +200,23 @@ def run(batch: int = 10) -> None:
                 continue
             groups = _normalize_groups(doc.get('follow_up_question_groups'), len(questions))
             prompt = _build_prompt(doc, questions, groups)
-            result = run_with_search(prompt, text_format=FollowupAnswerMap)
+            result = run_with_search(prompt, text_format=FollowupAnswersList)
 
             mapping = _coerce_answers_map(getattr(result, 'parsed', None))
             if not mapping and getattr(result, 'text', None):
                 try:
-                    mapping = _coerce_answers_map(json.loads(result.text))
+                    parsed_text = json.loads(result.text)
+                    if isinstance(parsed_text, dict) and isinstance(parsed_text.get('answers'), list):
+                        temp_map: Dict[int, Any] = {}
+                        for it in parsed_text.get('answers') or []:
+                            try:
+                                idx = int(it.get('index'))
+                                temp_map[idx] = {"text": it.get("text", ""), "sources": it.get("sources") or []}
+                            except Exception:
+                                continue
+                        mapping = _coerce_answers_map({str(k): v for k, v in temp_map.items()})
+                    else:
+                        mapping = _coerce_answers_map(parsed_text)
                 except Exception:
                     mapping = {}
             answers = _answers_to_list(mapping, questions)
@@ -223,6 +255,6 @@ def run(batch: int = 10) -> None:
 if __name__ == '__main__':
     import argparse
     p = argparse.ArgumentParser(description='Answer follow-up questions for enriched articles')
-    p.add_argument('--batch', type=int, default=10)
+    p.add_argument('--batch', type=int, default=100)
     args = p.parse_args()
     run(args.batch)

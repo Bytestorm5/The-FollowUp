@@ -188,8 +188,23 @@ class FollowupAnswer(BaseModel):
     sources: List[str] = Field(default_factory=list, description="List of source URLs used for this answer")
 
 
-class FollowupAnswerMap(RootModel[Dict[int, FollowupAnswer]]):  # type: ignore[type-arg]
-    mapping: Dict[int, FollowupAnswer]
+# Map of question index -> FollowupAnswer
+# Use RootModel in Pydantic v2 for a dict-root schema; fall back to __root__ for v1
+if RootModel is not None:
+    class FollowupAnswerMap(RootModel[Dict[int, FollowupAnswer]]):  # type: ignore[type-arg]
+        pass
+else:  # Pydantic v1 compatibility
+    class FollowupAnswerMap(BaseModel):  # type: ignore[type-arg]
+        __root__: Dict[int, FollowupAnswer]
+
+# Alternative list-based format for strict JSON schema consumers
+class FollowupAnswerItem(BaseModel):
+    index: int = Field(..., description="0-based question index")
+    text: str = Field(..., description="Concise answer to the question")
+    sources: List[str] = Field(..., description="List of source URLs used for this answer")
+
+class FollowupAnswersList(BaseModel):
+    answers: List[FollowupAnswerItem] = Field(..., description="List of answers keyed by 'index'")
 
 class ArticleEnrichment(BaseModel):
     clean_markdown: str = Field(..., description="Verbatim clean text formatted as Markdown")
