@@ -171,7 +171,7 @@ def split_markdown(md: str) -> List[Segment]:
 # -----------------------------
 
 DEFAULT_ENTITY_LABELS = {
-    "PERSON",
+    # "PERSON",
     # "ORG",
     "GPE",
     "LOC",
