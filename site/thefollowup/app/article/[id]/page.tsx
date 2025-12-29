@@ -240,47 +240,60 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
         {(followUpAnswers.length > 0 || followUpQuestions.length > 0) && (
           <section className="mt-8">
             <h2 className="text-lg font-semibold">Follow Up Questions</h2>
+            {followUpAnswers.length === 0 && followUpQuestions.length > 0 && (
+              <p className="mt-2 text-sm text-foreground/70">Answers are being generated. Check back soon.</p>
+            )}
             {followUpAnswers.length > 0 ? (
               <div className="mt-3 space-y-4">
                 {followUpAnswers.map((ans: any, idx: number) => (
-                  <div key={ans.index ?? idx} className="rounded-md border p-4">
-                    <p className="text-sm font-semibold">
-                      {ans.question || `Question ${typeof ans.index === "number" ? ans.index + 1 : idx + 1}`}
-                    </p>
-                    <div className="prose prose-sm prose-neutral mt-2 max-w-none">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          a: ({ href, children }) => <a href={href ?? ""} className="underline" target="_blank" rel="noreferrer">{children}</a>,
-                          p: ({ children }) => <p className="my-1">{children}</p>,
-                        }}
-                      >
-                        {ans.text || ""}
-                      </ReactMarkdown>
-                    </div>
-                    {Array.isArray(ans.sources) && ans.sources.length > 0 && (
-                      <div className="mt-3">
-                        <div className="text-xs font-semibold uppercase text-foreground/60">Sources</div>
-                        <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
-                          {ans.sources.map((s: string, i: number) => (
-                            <li key={i}>
-                              <a href={s} target="_blank" rel="noreferrer" className="underline break-words">
-                                {s}
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
+                  <details key={ans.index ?? idx} className="overflow-hidden rounded-md border">
+                    <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-semibold">
+                      <span>{ans.question || `Question ${typeof ans.index === "number" ? ans.index + 1 : idx + 1}`}</span>
+                      <span className="text-xs font-normal text-foreground/60">Expand</span>
+                    </summary>
+                    <div className="border-t p-4">
+                      <div className="prose prose-sm prose-neutral mt-2 max-w-none">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            a: ({ href, children }) => <a href={href ?? ""} className="underline" target="_blank" rel="noreferrer">{children}</a>,
+                            p: ({ children }) => <p className="my-1">{children}</p>,
+                          }}
+                        >
+                          {ans.text || ""}
+                        </ReactMarkdown>
                       </div>
-                    )}
-                  </div>
+                      {Array.isArray(ans.sources) && ans.sources.length > 0 && (
+                        <div className="mt-3">
+                          <div className="text-xs font-semibold uppercase text-foreground/60">Sources</div>
+                          <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
+                            {ans.sources.map((s: string, i: number) => (
+                              <li key={i}>
+                                <a href={s} target="_blank" rel="noreferrer" className="underline break-words">
+                                  {s}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </details>
                 ))}
               </div>
             ) : (
-              <ul className="mt-3 list-disc space-y-2 pl-6 text-sm">
+              <div className="mt-3 space-y-3">
                 {followUpQuestions.map((q: string, i: number) => (
-                  <li key={i}>{q}</li>
+                  <details key={i} className="overflow-hidden rounded-md border">
+                    <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">
+                      {q || `Question ${i + 1}`}
+                    </summary>
+                    <div className="border-t px-4 py-3 text-sm text-foreground/70">
+                      Answer in progress. Check back soon.
+                    </div>
+                  </details>
                 ))}
-              </ul>
+              </div>
             )}
           </section>
         )}

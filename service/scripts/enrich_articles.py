@@ -287,7 +287,8 @@ def run(batch: int = 50):
 
     template = _load_template()
 
-    # Find candidates and acquire enrichment locks to avoid concurrent processing
+    # Find candidates and acquire enrichment locks to avoid concurrent processing.
+    # Process the newest documents first so that same-run pipeline steps catch fresh articles.
     candidates = coll.find({
         '$or': [
             {'clean_markdown': {'$exists': False}},
@@ -296,8 +297,8 @@ def run(batch: int = 50):
             {'follow_up_questions': {'$exists': False}},
             {'follow_up_question_groups': {'$exists': False}},
             {'entities': {'$exists': False}},
-        ]
-    }).sort('inserted_at', 1)
+        ],
+    }).sort('inserted_at', -1)
 
     docs = []
     owner = os.environ.get('HOSTNAME') or f"pid-{os.getpid()}"

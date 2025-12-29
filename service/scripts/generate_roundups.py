@@ -19,6 +19,7 @@ from models import SilverRoundup, RoundupSeedArticle, RoundupResponseOutput
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# Skip generating extremely old periods; allow current dates to proceed
 CUTOFF_DATE = datetime.date(2025, 12, 15)
 
 
