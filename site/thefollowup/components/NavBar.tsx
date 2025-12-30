@@ -13,8 +13,8 @@ export default function NavBar() {
   }, []);
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50">
-      <div className="mx-auto max-w-6xl px-4">
+    <header className="fixed inset-x-0 top-0 z-50 mt-2">
+      <div className="mx-auto max-w-6xl px-4 lg:flex lg:items-center">
         {/* Mobile bar */}
         <div className="mt-3 flex h-12 items-center justify-between rounded-full bg-background/80 px-4 ring-1 ring-black/[.06] backdrop-blur lg:hidden">
           <button aria-label="Open menu" aria-expanded={open} aria-controls="mobile-drawer" onClick={() => setOpen(true)} className="flex flex-col gap-1">
@@ -32,7 +32,7 @@ export default function NavBar() {
         {/* Desktop nav */}
         <nav
           aria-label="Primary"
-          className="fade-border-b mx-auto mt-4 hidden h-14 w-full max-w-3xl items-center justify-center gap-8 rounded-full bg-background/80 px-8 shadow-sm ring-1 ring-black/[.06] backdrop-blur lg:flex"
+          className="fade-border-b mx-auto hidden h-14 w-max max-w-4xl items-center gap-6 rounded-full bg-background/80 px-6 shadow-sm ring-1 ring-black/[.06] backdrop-blur lg:flex lg:absolute lg:left-1/2 lg:-translate-x-1/2"
         >
           <Link href="/" className="flex items-center gap-2">
             <div className="h-6 w-6 rounded-full bg-primary/90" />
@@ -44,7 +44,6 @@ export default function NavBar() {
           <Link href="/feed" className="text-sm font-medium text-foreground hover:opacity-80">Feed</Link>
           <Link href="/fact_checks" className="text-sm font-medium text-foreground hover:opacity-80">Fact Checks</Link>
           <Link href="/roundups" className="text-sm font-medium text-foreground hover:opacity-80">Roundups</Link>
-          <Link href="/plans" className="text-sm font-medium text-foreground hover:opacity-80">Plans</Link>
           <div className="relative inline-block group">
             <Link href="/countdowns" className="text-sm font-medium text-foreground hover:opacity-80">Countdowns</Link>
             <div className="invisible absolute left-1/2 top-full z-50 w-44 -translate-x-1/2 rounded-md border border-[var(--color-border)] bg-background p-1 text-sm opacity-0 shadow-md transition group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto">
@@ -66,37 +65,31 @@ export default function NavBar() {
             </svg>
             {/* <span>Search</span> */}
           </Link>
-
-          <div className="ml-auto flex items-center gap-3 rounded-full border border-[var(--color-border)] bg-background/80 px-3 py-1.5 shadow-sm">
+          <SignedIn>
+            <UserButton afterSignOutUrl="/" />
+          </SignedIn>
+        </nav>
+        {/* Login Interactions */}
+        <div className="ml-auto hidden items-center gap-4 lg:flex">
             <SignedOut>
-              <div className="flex items-center gap-2">
-                <SignInButton mode="modal" forceRedirectUrl="/account" fallbackRedirectUrl="/account">
-                  <button className="rounded-full border border-[var(--color-border)] px-3 py-1 text-xs font-medium transition hover:bg-black/5">
-                    Sign in
-                  </button>
-                </SignInButton>
-                <SignUpButton
+                <SignInButton
                   mode="modal"
                   forceRedirectUrl="/account"
-                  signInForceRedirectUrl="/account"
-                  signInFallbackRedirectUrl="/account"
+                  fallbackRedirectUrl="/account"
+                  withSignUp
+                  asChild
                 >
-                  <button className="rounded-full bg-primary/90 px-3 py-1 text-xs font-semibold text-white transition hover:bg-primary">
-                    Create account
+                  <button className="rounded-full bg-primary/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary">
+                    Join
                   </button>
-                </SignUpButton>
-              </div>
+                </SignInButton>
             </SignedOut>
-            <SignedIn>
-              <div className="flex items-center gap-2">
-                <Link href="/account" className="text-sm font-medium text-foreground hover:opacity-80">
-                  Account
+            <SignedIn>           
+                <Link href="/plans" className="ml-8 rounded-full bg-primary/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary">
+                  Subscribe
                 </Link>
-                <UserButton afterSignOutUrl="/" />
-              </div>
             </SignedIn>
           </div>
-        </nav>
       </div>
 
       {/* Overlay */}
@@ -135,7 +128,7 @@ export default function NavBar() {
             <div className="mt-4 flex flex-col gap-2 border-t border-[var(--color-border)] pt-4">
               <SignInButton mode="modal" forceRedirectUrl="/account" fallbackRedirectUrl="/account">
                 <button className="rounded border border-[var(--color-border)] px-3 py-2 text-left text-sm font-medium hover:bg-black/5">
-                  Sign in to save your place
+                  Sign in
                 </button>
               </SignInButton>
               <SignUpButton
