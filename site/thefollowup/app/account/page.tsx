@@ -1,4 +1,4 @@
-import { SignInButton, SignUpButton } from "@clerk/nextjs";
+import { PricingTable, SignInButton, SignUpButton } from "@clerk/nextjs";
 import { auth, clerkClient, currentUser } from "@clerk/nextjs/server";
 import type { Metadata } from "next";
 import { revalidatePath } from "next/cache";
@@ -62,7 +62,7 @@ function normalizeTier(tier: unknown): Tier {
 async function updateTier(formData: FormData) {
   "use server";
 
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     redirect("/sign-in");
   }
@@ -72,7 +72,9 @@ async function updateTier(formData: FormData) {
     return;
   }
 
-  await clerkClient.users.updateUserMetadata(userId, {
+  const client = await clerkClient();
+
+  await client.users.updateUserMetadata(userId, {
     publicMetadata: { tier },
   });
 
@@ -107,22 +109,42 @@ export default async function AccountPage() {
       </div>
 
       {!user ? (
-        <div className="mt-8 rounded-lg border border-[var(--color-border)] bg-background/60 p-6">
-          <h2 className="text-xl font-semibold text-foreground">Sign in to continue</h2>
-          <p className="mt-2 text-sm text-foreground/80">
-            Create an account or sign in to manage your membership tier.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <SignInButton mode="modal" redirectUrl="/account">
-              <button className="rounded border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:bg-black/5">
-                Sign in
-              </button>
-            </SignInButton>
-            <SignUpButton mode="modal" redirectUrl="/account">
-              <button className="rounded bg-primary/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary">
-                Create account
-              </button>
-            </SignUpButton>
+        <div className="mt-8 space-y-6">
+          <div className="rounded-lg border border-[var(--color-border)] bg-background/60 p-6">
+            <h2 className="text-xl font-semibold text-foreground">Choose a plan to get started</h2>
+            <p className="mt-2 text-sm text-foreground/80">
+              Join to follow promises and support our newsroom. You can view all plans below, and returning readers can
+              sign in from the same Join flow.
+            </p>
+            <div className="mt-4">
+              <SignUpButton
+                mode="modal"
+                forceRedirectUrl="/account"
+                signInForceRedirectUrl="/account"
+                signInFallbackRedirectUrl="/account"
+              >
+                <button className="w-full rounded-md bg-primary/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary sm:w-auto">
+                  Join
+                </button>
+              </SignUpButton>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-[var(--color-border)] bg-background/60 p-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">Plans</h3>
+                <p className="text-sm text-foreground/70">Free and Supporter plans are open to everyone.</p>
+              </div>
+              <SignInButton mode="modal" forceRedirectUrl="/account" fallbackRedirectUrl="/account">
+                <button className="rounded-md border border-[var(--color-border)] px-3 py-2 text-sm font-medium hover:bg-black/5">
+                  Already joined? Sign in
+                </button>
+              </SignInButton>
+            </div>
+            <div className="mt-4">
+              <PricingTable />
+            </div>
           </div>
         </div>
       ) : (
@@ -146,6 +168,35 @@ export default async function AccountPage() {
               Free and Supporter are self-serve plans. Moderator and Admin are internal roles that we tag manually.
               If you need an internal role, please contact the team.
             </p>
+          </div>
+
+          <div className="rounded-lg border border-[var(--color-border)] bg-background/60 p-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">Plans</h3>
+                <p className="text-sm text-foreground/70">Compare tiers or change your membership.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <SignUpButton
+                  mode="modal"
+                  forceRedirectUrl="/account"
+                  signInForceRedirectUrl="/account"
+                  signInFallbackRedirectUrl="/account"
+                >
+                  <button className="rounded-md bg-primary/90 px-3 py-2 text-sm font-semibold text-white hover:bg-primary">
+                    Manage plan
+                  </button>
+                </SignUpButton>
+                <SignInButton mode="modal" forceRedirectUrl="/account" fallbackRedirectUrl="/account">
+                  <button className="rounded-md border border-[var(--color-border)] px-3 py-2 text-sm font-medium hover:bg-black/5">
+                    Update billing
+                  </button>
+                </SignInButton>
+              </div>
+            </div>
+            <div className="mt-4">
+              <PricingTable />
+            </div>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">

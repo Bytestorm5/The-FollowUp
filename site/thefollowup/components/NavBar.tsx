@@ -44,6 +44,7 @@ export default function NavBar() {
           <Link href="/feed" className="text-sm font-medium text-foreground hover:opacity-80">Feed</Link>
           <Link href="/fact_checks" className="text-sm font-medium text-foreground hover:opacity-80">Fact Checks</Link>
           <Link href="/roundups" className="text-sm font-medium text-foreground hover:opacity-80">Roundups</Link>
+          <Link href="/plans" className="text-sm font-medium text-foreground hover:opacity-80">Plans</Link>
           <div className="relative inline-block group">
             <Link href="/countdowns" className="text-sm font-medium text-foreground hover:opacity-80">Countdowns</Link>
             <div className="invisible absolute left-1/2 top-full z-50 w-44 -translate-x-1/2 rounded-md border border-[var(--color-border)] bg-background p-1 text-sm opacity-0 shadow-md transition group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto">
@@ -66,15 +67,20 @@ export default function NavBar() {
             {/* <span>Search</span> */}
           </Link>
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-3 rounded-full border border-[var(--color-border)] bg-background/80 px-3 py-1.5 shadow-sm">
             <SignedOut>
               <div className="flex items-center gap-2">
-                <SignInButton mode="modal" redirectUrl="/account">
+                <SignInButton mode="modal" forceRedirectUrl="/account" fallbackRedirectUrl="/account">
                   <button className="rounded-full border border-[var(--color-border)] px-3 py-1 text-xs font-medium transition hover:bg-black/5">
                     Sign in
                   </button>
                 </SignInButton>
-                <SignUpButton mode="modal" redirectUrl="/account">
+                <SignUpButton
+                  mode="modal"
+                  forceRedirectUrl="/account"
+                  signInForceRedirectUrl="/account"
+                  signInFallbackRedirectUrl="/account"
+                >
                   <button className="rounded-full bg-primary/90 px-3 py-1 text-xs font-semibold text-white transition hover:bg-primary">
                     Create account
                   </button>
@@ -116,6 +122,7 @@ export default function NavBar() {
           <Link href="/feed" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Feed</Link>
           <Link href="/fact_checks" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Fact Checks</Link>
           <Link href="/roundups" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Roundups</Link>
+          <Link href="/plans" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Plans</Link>
           <Link href="/search" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Search</Link>
           <div className="mt-2 font-semibold text-foreground/80">Countdowns</div>
           <Link href="/countdowns" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Active Countdowns</Link>
@@ -126,12 +133,17 @@ export default function NavBar() {
           <Link href="/about/methodology" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Methodology</Link>
           <SignedOut>
             <div className="mt-4 flex flex-col gap-2 border-t border-[var(--color-border)] pt-4">
-              <SignInButton mode="modal" redirectUrl="/account">
+              <SignInButton mode="modal" forceRedirectUrl="/account" fallbackRedirectUrl="/account">
                 <button className="rounded border border-[var(--color-border)] px-3 py-2 text-left text-sm font-medium hover:bg-black/5">
                   Sign in to save your place
                 </button>
               </SignInButton>
-              <SignUpButton mode="modal" redirectUrl="/account">
+              <SignUpButton
+                mode="modal"
+                forceRedirectUrl="/account"
+                signInForceRedirectUrl="/account"
+                signInFallbackRedirectUrl="/account"
+              >
                 <button className="rounded bg-primary/90 px-3 py-2 text-left text-sm font-semibold text-white hover:bg-primary">
                   Create an account
                 </button>
