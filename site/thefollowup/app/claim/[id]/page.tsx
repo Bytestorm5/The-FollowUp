@@ -9,6 +9,9 @@ import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsColle
 import AdsenseAd from "@/components/AdSenseAd";
 import { absUrl } from "@/lib/seo";
 import { getVerdictInfo } from "@/lib/factcheck";
+import PostPoll from "@/components/PostPoll";
+import Comments from "@/components/Comments";
+import TrackVisit from "@/components/TrackVisit";
 
 export const dynamic = "force-dynamic";
 
@@ -139,6 +142,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-4 py-8">
+        <TrackVisit postId={String((claim as any)._id)} postType="claim" />
         {/* ClaimReview JSON-LD for statements */}
         {claim.type === "statement" && latest && (() => {
           const idStr = String((claim as any)._id);
@@ -191,6 +195,10 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
             </div>
           );
         })()}
+        {/* Poll below verdict/explanation for fact checks */}
+        <div className="mt-3">
+          <PostPoll postId={String((claim as any)._id)} postType="claim" />
+        </div>
         <hr className="mt-4" />
 
         {/* Mechanism pill if present */}
@@ -345,6 +353,9 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
             Back to Countdowns
           </Link>
         </div>
+
+        {/* Comments */}
+        <Comments postId={String((claim as any)._id)} postType="claim" />
       </div>
     </div>
   );

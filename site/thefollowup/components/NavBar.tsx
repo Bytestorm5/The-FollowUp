@@ -71,7 +71,19 @@ export default function NavBar() {
               {/* <span>Search</span> */}
             </Link>
             <SignedIn>
-              <UserButton afterSignOutUrl="/" />
+              <UserButton afterSignOutUrl="/">
+                <UserButton.MenuItems>
+                  <UserButton.Link
+                    label="History"
+                    href="/account/history"
+                    labelIcon={
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M3 3h18v2H3zM3 7h18v2H3zM3 11h18v2H3zM3 15h18v2H3zM3 19h18v2H3z" />
+                      </svg>
+                    }
+                  />
+                </UserButton.MenuItems>
+              </UserButton>
             </SignedIn>
           </nav>
 
