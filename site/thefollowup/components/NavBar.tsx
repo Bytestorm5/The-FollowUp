@@ -95,7 +95,6 @@ export default function NavBar() {
                 forceRedirectUrl="/account"
                 fallbackRedirectUrl="/account"
                 withSignUp
-                asChild
               >
                 <button className="rounded-full bg-primary/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary">
                   Join

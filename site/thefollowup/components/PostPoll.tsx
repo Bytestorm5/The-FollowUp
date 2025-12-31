@@ -54,7 +54,7 @@ export default function PostPoll({ postId, postType, showInteresting = true, sho
           <span className="text-foreground/80">{parts.join(" • ")}</span>
           <span className="flex items-center gap-2 text-foreground/60">
             <span>Log in to vote</span>
-            <SignInButton mode="modal" withSignUp asChild>
+            <SignInButton mode="modal" withSignUp>
               <button className="rounded-full border px-2 py-0.5 text-xs hover:bg-black/5">Join</button>
             </SignInButton>
           </span>

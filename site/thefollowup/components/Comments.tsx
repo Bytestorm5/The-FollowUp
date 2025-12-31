@@ -74,7 +74,7 @@ export default function Comments({ postId, postType }: Props) {
         ) : (
           <div className="flex items-center justify-between gap-3 text-sm text-foreground/70">
             <span>Only logged-in users can comment.</span>
-            <SignInButton mode="modal" withSignUp asChild>
+            <SignInButton mode="modal" withSignUp>
               <button className="rounded-full bg-primary/90 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary">Join</button>
             </SignInButton>
           </div>
