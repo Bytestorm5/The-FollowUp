@@ -183,3 +183,53 @@ export async function getSilverLogsCollection(): Promise<Collection<SilverLog>> 
   const db = await getDb();
   return db.collection<SilverLog>("silver_logs");
 }
+
+// Gold collections: community features
+export interface GoldComment {
+  _id?: ObjectId;
+  post_id: string | ObjectId;
+  post_type: "article" | "claim" | "fact_check" | "roundup" | string;
+  user_id: string; // Clerk user id
+  display_name?: string | null;
+  text: string;
+  created_at: Date | string;
+  updated_at?: Date | string;
+  held_for_review?: boolean;
+  likes?: number;
+  dislikes?: number;
+  reactions_by?: Record<string, 1 | -1>; // user_id -> reaction
+}
+
+export async function getGoldCommentsCollection(): Promise<Collection<GoldComment>> {
+  const db = await getDb();
+  return db.collection<GoldComment>("gold_comments");
+}
+
+export interface GoldPoll {
+  _id?: ObjectId;
+  post_id: string | ObjectId;
+  post_type: "article" | "claim" | "fact_check" | "roundup" | string;
+  user_id: string; // Clerk user id
+  interesting_yes: boolean;
+  support_yes: boolean;
+  created_at: Date | string;
+  updated_at?: Date | string;
+}
+
+export async function getGoldPollsCollection(): Promise<Collection<GoldPoll>> {
+  const db = await getDb();
+  return db.collection<GoldPoll>("gold_polls");
+}
+
+export interface GoldTraffic {
+  _id?: ObjectId;
+  post_id: string | ObjectId;
+  post_type: "article" | "claim" | "fact_check" | "roundup" | string;
+  user_id: string; // Clerk user id
+  entered_at: Date | string;
+}
+
+export async function getGoldTrafficCollection(): Promise<Collection<GoldTraffic>> {
+  const db = await getDb();
+  return db.collection<GoldTraffic>("gold_traffic");
+}

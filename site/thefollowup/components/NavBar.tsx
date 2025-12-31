@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 
 export default function NavBar() {
   const [open, setOpen] = useState(false);
@@ -12,7 +13,7 @@ export default function NavBar() {
   }, []);
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50">
+    <header className="fixed inset-x-0 top-0 z-50 mt-2">
       <div className="mx-auto max-w-6xl px-4">
         {/* Mobile bar */}
         <div className="mt-3 flex h-12 items-center justify-between rounded-full bg-background/80 px-4 ring-1 ring-black/[.06] backdrop-blur lg:hidden">
@@ -28,43 +29,86 @@ export default function NavBar() {
           <div className="w-6" />
         </div>
 
-        {/* Desktop nav */}
-        <nav
-          aria-label="Primary"
-          className="fade-border-b mx-auto mt-4 hidden h-14 w-full max-w-3xl items-center justify-center gap-8 rounded-full bg-background/80 px-8 shadow-sm ring-1 ring-black/[.06] backdrop-blur lg:flex"
-        >
-          <Link href="/" className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-full bg-primary/90" />
-            <span className="text-sm tracking-wide text-primary">THE FOLLOW UP</span>
-          </Link>
+        {/* Desktop: 3-column grid keeps nav truly centered while allowing right-side actions */}
+        <div className="mt-3 hidden lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-3">
+          {/* Left spacer balances the right actions */}
+          <div aria-hidden />
 
-          <div className="h-5 w-px bg-black/10" aria-hidden="true" />
+          {/* Desktop nav */}
+          <nav
+            aria-label="Primary"
+            className="fade-border-b hidden h-14 w-max max-w-4xl items-center gap-6 rounded-full bg-background/80 px-6 shadow-sm ring-1 ring-black/[.06] backdrop-blur lg:flex justify-self-center"
+          >
+            <Link href="/" className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-full bg-primary/90" />
+              <span className="text-sm tracking-wide text-primary">THE FOLLOW UP</span>
+            </Link>
 
-          <Link href="/feed" className="text-sm font-medium text-foreground hover:opacity-80">Feed</Link>
-          <Link href="/fact_checks" className="text-sm font-medium text-foreground hover:opacity-80">Fact Checks</Link>
-          <Link href="/roundups" className="text-sm font-medium text-foreground hover:opacity-80">Roundups</Link>
-          <div className="relative inline-block group">
-            <Link href="/countdowns" className="text-sm font-medium text-foreground hover:opacity-80">Countdowns</Link>
-            <div className="invisible absolute left-1/2 top-full z-50 w-44 -translate-x-1/2 rounded-md border border-[var(--color-border)] bg-background p-1 text-sm opacity-0 shadow-md transition group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto">
-              <Link href="/countdowns/past" className="block rounded px-3 py-2 hover:bg-black/5">Past Countdowns</Link>
+            <div className="h-5 w-px bg-black/10" aria-hidden="true" />
+
+            <Link href="/feed" className="text-sm font-medium text-foreground hover:opacity-80">Feed</Link>
+            <Link href="/fact_checks" className="text-sm font-medium text-foreground hover:opacity-80">Fact Checks</Link>
+            <Link href="/roundups" className="text-sm font-medium text-foreground hover:opacity-80">Roundups</Link>
+            <div className="relative inline-block group">
+              <Link href="/countdowns" className="text-sm font-medium text-foreground hover:opacity-80">Countdowns</Link>
+              <div className="invisible absolute left-1/2 top-full z-50 w-44 -translate-x-1/2 rounded-md border border-[var(--color-border)] bg-background p-1 text-sm opacity-0 shadow-md transition group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto">
+                <Link href="/countdowns/past" className="block rounded px-3 py-2 hover:bg-black/5">Past Countdowns</Link>
+              </div>
             </div>
-          </div>
-          <div className="relative inline-block group">
-            <Link href="/about" className="text-sm font-medium text-foreground hover:opacity-80">About</Link>
-            <div className="invisible absolute left-1/2 top-full z-50 w-44 -translate-x-1/2 rounded-md border border-[var(--color-border)] bg-background p-1 text-sm opacity-0 shadow-md transition group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto">
-              <Link href="/about/statistics" className="block rounded px-3 py-2 hover:bg-black/5">Statistics</Link>
-              <Link href="/about/methodology" className="block rounded px-3 py-2 hover:bg-black/5">Methodology</Link>
+            <div className="relative inline-block group">
+              <Link href="/about" className="text-sm font-medium text-foreground hover:opacity-80">About</Link>
+              <div className="invisible absolute left-1/2 top-full z-50 w-44 -translate-x-1/2 rounded-md border border-[var(--color-border)] bg-background p-1 text-sm opacity-0 shadow-md transition group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto">
+                <Link href="/about/statistics" className="block rounded px-3 py-2 hover:bg-black/5">Statistics</Link>
+                <Link href="/about/methodology" className="block rounded px-3 py-2 hover:bg-black/5">Methodology</Link>
+              </div>
             </div>
-          </div>
 
-          <Link href="/search" className="flex items-center gap-2 text-sm font-medium text-foreground hover:opacity-80">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            {/* <span>Search</span> */}
-          </Link>
-        </nav>
+            <Link href="/search" className="flex items-center gap-2 text-sm font-medium text-foreground hover:opacity-80">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              {/* <span>Search</span> */}
+            </Link>
+            <SignedIn>
+              <UserButton afterSignOutUrl="/">
+                <UserButton.MenuItems>
+                  <UserButton.Link
+                    label="History"
+                    href="/account/history"
+                    labelIcon={
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M3 3h18v2H3zM3 7h18v2H3zM3 11h18v2H3zM3 15h18v2H3zM3 19h18v2H3z" />
+                      </svg>
+                    }
+                  />
+                </UserButton.MenuItems>
+              </UserButton>
+            </SignedIn>
+          </nav>
+
+          {/* Login Interactions */}
+          <div className="hidden items-center justify-self-start gap-3 lg:flex">
+            <SignedOut>
+              <SignInButton
+                mode="modal"
+                forceRedirectUrl="/account"
+                fallbackRedirectUrl="/account"
+                withSignUp
+                asChild
+              >
+                <button className="rounded-full bg-primary/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary">
+                  Join
+                </button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <Link href="/plans" className="rounded-full bg-primary/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary">
+                Subscribe
+              </Link>
+            </SignedIn>
+          </div>
+        </div>
       </div>
 
       {/* Overlay */}
@@ -90,6 +134,7 @@ export default function NavBar() {
           <Link href="/feed" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Feed</Link>
           <Link href="/fact_checks" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Fact Checks</Link>
           <Link href="/roundups" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Roundups</Link>
+          <Link href="/plans" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Plans</Link>
           <Link href="/search" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Search</Link>
           <div className="mt-2 font-semibold text-foreground/80">Countdowns</div>
           <Link href="/countdowns" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Active Countdowns</Link>
@@ -98,6 +143,33 @@ export default function NavBar() {
           <Link href="/about" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Mission</Link>
           <Link href="/about/statistics" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Statistics</Link>
           <Link href="/about/methodology" className="rounded px-2 py-2 hover:bg-black/5" onClick={() => setOpen(false)}>Methodology</Link>
+          <SignedOut>
+            <div className="mt-4 flex flex-col gap-2 border-t border-[var(--color-border)] pt-4">
+              <SignInButton mode="modal" forceRedirectUrl="/account" fallbackRedirectUrl="/account">
+                <button className="rounded border border-[var(--color-border)] px-3 py-2 text-left text-sm font-medium hover:bg-black/5">
+                  Sign in
+                </button>
+              </SignInButton>
+              <SignUpButton
+                mode="modal"
+                forceRedirectUrl="/account"
+                signInForceRedirectUrl="/account"
+                signInFallbackRedirectUrl="/account"
+              >
+                <button className="rounded bg-primary/90 px-3 py-2 text-left text-sm font-semibold text-white hover:bg-primary">
+                  Create an account
+                </button>
+              </SignUpButton>
+            </div>
+          </SignedOut>
+          <SignedIn>
+            <div className="mt-4 flex items-center justify-between gap-2 rounded border border-[var(--color-border)] px-3 py-2">
+              <Link href="/account" className="text-sm font-medium text-foreground hover:opacity-80" onClick={() => setOpen(false)}>
+                Account
+              </Link>
+              <UserButton afterSignOutUrl="/" />
+            </div>
+          </SignedIn>
         </nav>
       </aside>
     </header>

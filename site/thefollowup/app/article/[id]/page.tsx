@@ -8,6 +8,9 @@ import { mapVerdictDisplay } from "@/lib/verdict";
 import AdsenseAd from "@/components/AdSenseAd";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverUpdatesCollection, ObjectId, type BronzeLink, type SilverClaim, type SilverUpdate } from "@/lib/mongo";
 import { absUrl } from "@/lib/seo";
+import PostPoll from "@/components/PostPoll";
+import Comments from "@/components/Comments";
+import TrackVisit from "@/components/TrackVisit";
 
 export const dynamic = "force-dynamic";
 
@@ -133,6 +136,7 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-4 py-8">
+        <TrackVisit postId={String((doc as any)._id)} postType="article" />
         {/* Article JSON-LD */}
         {(() => {
           const idStr = String((doc as any)._id);
@@ -172,6 +176,9 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
         <h1 className="text-3xl font-semibold tracking-tight" style={{ fontFamily: "var(--font-serif)" }}>
           {doc.title}
         </h1>
+        <div className="mt-3">
+          <PostPoll postId={String((doc as any)._id)} postType="article" />
+        </div>
         <hr className="mt-4" />
         
         {/* Original link between takeaways and article text */}
@@ -309,6 +316,9 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.clean_markdown}</ReactMarkdown>
           </section>
         )} */}
+
+        {/* Comments */}
+        <Comments postId={String((doc as any)._id)} postType="article" />
 
         {/* Footer ad slot */}
         <div className="mt-6 rounded-md border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-foreground/60">

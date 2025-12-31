@@ -4,6 +4,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Link from "next/link";
 import { getSilverRoundupsCollection, ObjectId } from "@/lib/mongo";
+import PostPoll from "@/components/PostPoll";
+import Comments from "@/components/Comments";
+import TrackVisit from "@/components/TrackVisit";
 
 function label(kind: string): string {
   return kind === "daily" ? "Daily" : kind === "weekly" ? "Weekly" : kind === "monthly" ? "Monthly" : kind === "yearly" ? "Yearly" : kind;
@@ -27,12 +30,16 @@ export default async function RoundupDetail({ params }: { params: Promise<{ id: 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-4 py-6">
+        <TrackVisit postId={String((doc as any)._id)} postType="roundup" />
         <div className="mb-3 text-xs text-foreground/70">
           <Link href="/roundups" className="hover:underline">Roundups</Link> / {label((doc as any).roundup_type)}
         </div>
         <h1 className="text-3xl font-semibold text-primary" style={{ fontFamily: "var(--font-serif)" }}>{doc.title}</h1>
         <div className="mt-1 text-xs text-foreground/60">
           {new Date(doc.period_start as any).toLocaleDateString()} – {new Date(doc.period_end as any).toLocaleDateString()}
+        </div>
+        <div className="mt-3">
+          <PostPoll postId={String((doc as any)._id)} postType="roundup" showSupport={false} />
         </div>
         <article className="markdown mt-6 max-w-none">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.summary_markdown || ""}</ReactMarkdown>
@@ -49,6 +56,8 @@ export default async function RoundupDetail({ params }: { params: Promise<{ id: 
             </ul>
           </section>
         )}
+        {/* Comments */}
+        <Comments postId={String((doc as any)._id)} postType="roundup" />
       </div>
     </div>
   );

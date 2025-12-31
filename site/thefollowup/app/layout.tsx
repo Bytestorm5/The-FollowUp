@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Source_Serif_4 } from "next/font/google";
+import {
+  ClerkProvider,
+} from "@clerk/nextjs";
 import NavBar from "@/components/NavBar";
 import Script from "next/script";
 import "./globals.css";
@@ -52,30 +55,32 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <head>
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-JMWHH2LNGZ"
-          strategy="afterInteractive"
-        />
-        <Script id="gtag-init" strategy="afterInteractive">{`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          gtag('js', new Date());
+    <ClerkProvider>
+      <html lang="en">
+        <head>
+          <Script
+            src="https://www.googletagmanager.com/gtag/js?id=G-JMWHH2LNGZ"
+            strategy="afterInteractive"
+          />
+          <Script id="gtag-init" strategy="afterInteractive">{`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
 
-          gtag('config', 'G-JMWHH2LNGZ');
-        `}</Script>
+            gtag('config', 'G-JMWHH2LNGZ');
+          `}</Script>
 
-        <Script
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4178327340523784"
-          crossOrigin="anonymous"
-          strategy="afterInteractive"
-        />
-      </head>
-      <body className={`${inter.variable} ${sourceSerif.variable} font-sans bg-background text-foreground antialiased`}>
-        <NavBar />
-        <div className="pt-16">{children}</div>
-      </body>
-    </html>
+          <Script
+            src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4178327340523784"
+            crossOrigin="anonymous"
+            strategy="afterInteractive"
+          />
+        </head>
+        <body className={`${inter.variable} ${sourceSerif.variable} font-sans bg-background text-foreground antialiased`}>
+          <NavBar />
+          <div className="pt-16">{children}</div>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
