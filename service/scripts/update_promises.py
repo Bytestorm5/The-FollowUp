@@ -34,6 +34,68 @@ except Exception:
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+
+def _pipeline_day_bounds(d: datetime.date) -> Tuple[datetime.datetime, datetime.datetime]:
+    """Return start (inclusive) and end (exclusive) datetimes for the given pipeline date
+    in the fixed UTC-5 timezone used by the pipeline.
+    """
+    try:
+        from util.timezone import fixed_offset_tz
+        tz = fixed_offset_tz()
+    except Exception:
+        tz = datetime.timezone(datetime.timedelta(hours=-5))
+    start = datetime.datetime(d.year, d.month, d.day, tzinfo=tz)
+    end = start + datetime.timedelta(days=1)
+    return start, end
+
+
+def _has_update_on_date(claim_id: Any, day: datetime.date) -> bool:
+    """True if there is already a SilverUpdate for this claim created on the given pipeline day.
+
+    Uses created_at window in fixed UTC-5 to match how pipeline dates are defined.
+    """
+    try:
+        db = getattr(mongo, 'DB', None)
+        if db is None:
+            return False
+        coll = db.get_collection('silver_updates')
+        start, end = _pipeline_day_bounds(day)
+        q = { 'claim_id': claim_id, 'created_at': { '$gte': start, '$lt': end } }
+        try:
+            q = mongo.normalize_dates(q)
+        except Exception:
+            pass
+        return coll.count_documents(q, limit=1) > 0
+    except Exception:
+        return False
+
+
+def _invalidate_followups_for_day(claim_id: Any, day: datetime.date, processed_update_id: Optional[Any] = None) -> int:
+    """Mark all unprocessed followups for this claim on the given day as processed (invalidated).
+
+    Returns the number of followups modified.
+    """
+    try:
+        db = getattr(mongo, 'DB', None)
+        if db is None:
+            return 0
+        coll = db.get_collection('silver_followups')
+        f = { 'claim_id': claim_id, 'follow_up_date': day, '$or': [ { 'processed_at': { '$exists': False } }, { 'processed_at': None } ] }
+        try:
+            f = mongo.normalize_dates(f)
+        except Exception:
+            pass
+        upd = { '$set': { 'processed_at': datetime.datetime.utcnow() } }
+        if processed_update_id is not None:
+            upd['$set']['processed_update_id'] = processed_update_id
+        res = coll.update_many(f, upd)
+        try:
+            return getattr(res, 'modified_count', 0) or 0
+        except Exception:
+            return 0
+    except Exception:
+        return 0
+
 def _is_terminal_verdict(v: Optional[str]) -> bool:
     if not v:
         return False
@@ -139,6 +201,19 @@ def _build_requests(claim_pairs: List[Tuple[Any, MongoClaim]], regular_tpl: str,
 
         article_date = getattr(claim, 'article_date', None)
         article_date_str = str(article_date) if article_date is not None else ''
+
+        # Gate: only one update per claim per pipeline date
+        try:
+            _today_for_gate = _get_pipeline_today()
+            if _has_update_on_date(claim_id, _today_for_gate):
+                # Also invalidate any same-day scheduled followups for this claim
+                invalidated = _invalidate_followups_for_day(claim_id, _today_for_gate)
+                if invalidated:
+                    logger.info('Invalidated %d same-day followups for claim %s due to existing update today', invalidated, claim_id)
+                logger.info('Skipping scheduled update for claim %s; already updated today', claim_id)
+                continue
+        except Exception:
+            pass
 
         content_parts = ["-- Article Metadata --"]
         content_parts.append(f"Source Article Link: {getattr(claim, 'article_link', '')}")
@@ -600,6 +675,17 @@ def main():
         try:
             followup_id = f.get('_id')
             custom_id = f"followup:{followup_id}:{idx}"
+            # Gate: if already have an update for this claim today, skip and invalidate all same-day followups
+            try:
+                _cid = f.get('claim_id')
+                if _has_update_on_date(_cid, pipeline_today):
+                    invalidated = _invalidate_followups_for_day(_cid, pipeline_today)
+                    if invalidated:
+                        logger.info('Invalidated %d same-day followups for claim %s due to existing update today', invalidated, _cid)
+                    # Skip building this followup request
+                    continue
+            except Exception:
+                pass
             content_parts = ["-- Followup Metadata --"]
             content_parts.append(f"Source Article Link: {f.get('article_link', '')}")
             content_parts.append(f"Source Article Date: {str(f.get('article_date', ''))}")
@@ -674,6 +760,27 @@ def main():
         model_text = ''
         verdict = 'in_progress'
         lm_log_obj = None
+        # Execution-time gate: if this is a scheduled (promise) or followup request and an update
+        # already exists for this claim on the pipeline date, skip executing and invalidate followups.
+        try:
+            claim_id_for_gate = None
+            if is_followup and followup_doc is not None:
+                claim_id_for_gate = followup_doc.get('claim_id')
+            else:
+                # Only gate for scheduled promise checks (endpoint/regular interval)
+                if update_type in (UpdateType.ENDPOINT, UpdateType.REGULAR_INTERVAL):
+                    claim_id_for_gate = raw.get('_id')
+            if claim_id_for_gate is not None and _has_update_on_date(claim_id_for_gate, pipeline_today):
+                if is_followup and followup_doc is not None:
+                    try:
+                        _invalidate_followups_for_day(claim_id_for_gate, pipeline_today)
+                        logger.info('Skipped execution and invalidated same-day followups for claim %s due to existing update today', claim_id_for_gate)
+                    except Exception:
+                        logger.exception('Failed invalidating followups during execution-time gate')
+                # Skip to next request without calling the model
+                continue
+        except Exception:
+            pass
         try:
             # Choose schema based on custom id (statements use fact check schema)
             schema = FactCheckResponseOutput if is_factcheck else ModelResponseOutput
@@ -907,6 +1014,17 @@ def main():
                         logger.info(f"Marked followup {followup_doc.get('_id')} as processed")
                     except Exception:
                         logger.exception('Failed to mark followup as processed')
+                # Regardless of origin (scheduled or followup), once an update is written for a claim
+                # on the pipeline date, invalidate any other same-day followups for that claim.
+                try:
+                    claim_for_invalidate = (followup_doc.get('claim_id') if is_followup and followup_doc is not None else raw.get('_id'))
+                except Exception:
+                    claim_for_invalidate = None
+                if claim_for_invalidate is not None and insert_res is not None:
+                    try:
+                        _invalidate_followups_for_day(claim_for_invalidate, pipeline_today, insert_res.inserted_id)
+                    except Exception:
+                        logger.exception('Failed to invalidate same-day followups after update insertion')
             except Exception:
                 logger.exception('Error while post-processing followup mapping entry')
 
