@@ -305,7 +305,13 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                         <span className="ml-2 rounded-full border px-2 py-0.5 text-xs uppercase text-foreground/70">{verdict}</span>
                       )}
                     </div>
-                    {text && <div className="mt-1 text-sm">{text}</div>}
+                    {text && (
+                      <div className="mt-1 text-sm">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ p: ({ children }) => <>{children}</>, a: ({ href, children }) => <a href={href} className="underline">{children}</a> }}>
+                          {text}
+                        </ReactMarkdown>
+                      </div>
+                    )}
                     {sources && sources.length > 0 && (
                       <ul className="mt-1 list-disc pl-5 text-sm">
                         {sources.map((s, i) => (
