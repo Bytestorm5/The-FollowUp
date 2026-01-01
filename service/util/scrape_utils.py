@@ -22,7 +22,7 @@ if _service_dir not in sys.path:
     sys.path.insert(0, _service_dir)
 
 from models import LinkAggregationStep, LinkAggregationResult
-
+from functools import cache
 
 def read_rss_feed(
     url: str,
@@ -249,7 +249,7 @@ def iter_scrape(
         i += 1
     return LinkAggregationResult.from_steps(results)
 
-
+@cache
 def playwright_get(url: str, timeout: int = 20, headers: Optional[Dict[str, str]] = None, try_requests: Literal['first', 'last', 'dont', 'default'] = 'default'):
     """Try a few requests header profiles, then fall back to Playwright to render JS.
 
@@ -266,10 +266,11 @@ def playwright_get(url: str, timeout: int = 20, headers: Optional[Dict[str, str]
 
     if try_requests == 'default':
         playwright_domains = [
-            "state.gov"
+            "state.gov",
+            "defense.gov",
         ]
         requests_domains = [
-            "defense.gov"
+            
         ]
         try_requests = 'last' if any(x in url for x in playwright_domains) else 'first'
         try_requests = 'first' if any(x in url for x in requests_domains) else try_requests
@@ -288,7 +289,7 @@ def playwright_get(url: str, timeout: int = 20, headers: Optional[Dict[str, str]
             try:
                 resp = session.get(url, headers=prof, timeout=(5, timeout), allow_redirects=True)
                 logger.info("playwright_get: tried requests profile=%s status=%s url=%s", prof.get("User-Agent"), getattr(resp, "status_code", None), url)
-                if getattr(resp, "status_code", None) and resp.status_code != 403:
+                if getattr(resp, "status_code", None):
                     resp.raise_for_status()
                     return resp
                 last_exc = resp
@@ -335,3 +336,7 @@ def playwright_get(url: str, timeout: int = 20, headers: Optional[Dict[str, str]
         return _do_playwright()
     else:
         raise ValueError(f"playwright_get: invalid try_requests value: {try_requests}")
+
+if __name__ == "__main__":
+    resp = playwright_get('https://www.war.gov/News/News-Stories/Article/Article/4369500/army-surgery-resident-develops-groundbreaking-life-support-system-named-to-forb/')
+    print(resp)

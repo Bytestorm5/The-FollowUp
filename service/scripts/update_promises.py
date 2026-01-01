@@ -536,7 +536,6 @@ def main():
         content = "\n".join(parts)
         req = {
             "custom_id": str(custom_id),
-            "model": os.environ.get('OPENAI_MODEL', 'gpt-5-nano'),
             "input": content,
             "system": fact_check_template.strip(),
         }
@@ -610,7 +609,6 @@ def main():
 
             req = {
                 'custom_id': str(custom_id),
-                'model': os.environ.get('OPENAI_MODEL', 'gpt-5-mini'),
                 'input': content,
                 'system': endpoint_checkin_template.strip(),
             }

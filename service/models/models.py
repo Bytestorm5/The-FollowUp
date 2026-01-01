@@ -1,5 +1,10 @@
 from typing import Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, Field
+try:
+    # Pydantic v2
+    from pydantic import field_validator
+except Exception:  # pragma: no cover
+    field_validator = None  # type: ignore
 import datetime
 from bson import ObjectId
 try:  # Pydantic v2
@@ -14,6 +19,26 @@ class ArticleLink(BaseModel):
     tags: List[str] = Field(..., description="Tags associated with the news article")
     raw_content: str = Field(..., description="Raw content of the news article")
     process_posturing: bool = False
+
+    if field_validator is not None:
+        @field_validator('date', mode='before')  # type: ignore[misc]
+        @classmethod
+        def _normalize_link_date(cls, v):
+            if v is None:
+                return v
+            import datetime as _dt
+            if isinstance(v, _dt.datetime):
+                return v.date()
+            if isinstance(v, str):
+                s = v.strip()
+                try:
+                    return _dt.datetime.fromisoformat(s).date()
+                except Exception:
+                    try:
+                        return _dt.date.fromisoformat(s)
+                    except Exception:
+                        return v
+            return v
 
 class LinkAggregationStep(BaseModel):
     articles: List[ArticleLink] = Field(..., description="List of article links")
@@ -47,6 +72,26 @@ class MongoArticle(BaseModel):
     key_takeaways: Optional[List[str]] = Field(None, description="Bullet point key takeaways from the article")
     priority: Optional[int] = Field(None, description="Article priority score: 1 (Active Emergency) .. 5 (Operational Updates)")
     
+    if field_validator is not None:
+        @field_validator('date', mode='before')  # type: ignore[misc]
+        @classmethod
+        def _normalize_article_date(cls, v):
+            if v is None:
+                return v
+            import datetime as _dt
+            if isinstance(v, _dt.datetime):
+                return v.date()
+            if isinstance(v, str):
+                s = v.strip()
+                try:
+                    return _dt.datetime.fromisoformat(s).date()
+                except Exception:
+                    try:
+                        return _dt.date.fromisoformat(s)
+                    except Exception:
+                        return v
+            return v
+
     def __init__(self, **kwargs):
         if "_id" in kwargs:
             kwargs["id"] = ObjectId(kwargs["id"]) if isinstance(kwargs["_id"], str) else kwargs["_id"]
@@ -154,6 +199,27 @@ class ClaimProcessingStep(BaseModel):
         description="Optional routing hint: how the claim is executed (directive, rulemaking, enforcement, etc.).",
     )
 
+    if field_validator is not None:
+        @field_validator('completion_condition_date', 'event_date', mode='before')  # type: ignore[misc]
+        @classmethod
+        def _normalize_step_dates(cls, v):
+            if v is None:
+                return v
+            import datetime as _dt
+            # Allow Date_Delta dicts/instances to pass through
+            if isinstance(v, _dt.datetime):
+                return v.date()
+            if isinstance(v, str):
+                s = v.strip()
+                try:
+                    return _dt.datetime.fromisoformat(s).date()
+                except Exception:
+                    try:
+                        return _dt.date.fromisoformat(s)
+                    except Exception:
+                        return v
+            return v
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -239,6 +305,56 @@ class MongoClaim(BaseModel):
     mechanism: Optional[Mechanism] = Field(None, description="Routing hint on how the claim is executed.")
     lm_log: Optional["LMLogEntry"] = Field(None, description="Log metadata for the LLM call that produced this claim")
     
+    # Accept datetimes/strings for article_date and coerce to date before validation to avoid
+    # pydantic v2 error: "Datetimes provided to dates should have zero time".
+    if field_validator is not None:
+        @field_validator('article_date', mode='before')  # type: ignore[misc]
+        @classmethod
+        def _normalize_article_date(cls, v):
+            if v is None:
+                return v
+            import datetime as _dt
+            if isinstance(v, _dt.datetime):
+                return v.date()
+            if isinstance(v, str):
+                s = v.strip()
+                # Try datetime first, then date
+                try:
+                    return _dt.datetime.fromisoformat(s).date()
+                except Exception:
+                    try:
+                        return _dt.date.fromisoformat(s)
+                    except Exception:
+                        return v
+            return v
+
+        @field_validator('event_date', 'completion_condition_date', mode='before')  # type: ignore[misc]
+        @classmethod
+        def _normalize_optional_union_dates(cls, v):
+            if v is None:
+                return v
+            # If it's already a Date_Delta or dict for Date_Delta, leave as-is
+            try:
+                from typing import get_origin
+            except Exception:
+                get_origin = None  # type: ignore
+            import datetime as _dt
+            # Datetime -> date
+            if isinstance(v, _dt.datetime):
+                return v.date()
+            # Strings -> try datetime then date
+            if isinstance(v, str):
+                s = v.strip()
+                try:
+                    return _dt.datetime.fromisoformat(s).date()
+                except Exception:
+                    try:
+                        return _dt.date.fromisoformat(s)
+                    except Exception:
+                        return v
+            # dict (for Date_Delta) or Date_Delta instance -> return as-is
+            return v
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if isinstance(self.completion_condition_date, str):
@@ -301,6 +417,26 @@ class SilverUpdate(BaseModel):
     class Config:
         arbitrary_types_allowed = True
 
+    if field_validator is not None:
+        @field_validator('article_date', mode='before')  # type: ignore[misc]
+        @classmethod
+        def _normalize_article_date(cls, v):
+            if v is None:
+                return v
+            import datetime as _dt
+            if isinstance(v, _dt.datetime):
+                return v.date()
+            if isinstance(v, str):
+                s = v.strip()
+                try:
+                    return _dt.datetime.fromisoformat(s).date()
+                except Exception:
+                    try:
+                        return _dt.date.fromisoformat(s)
+                    except Exception:
+                        return v
+            return v
+
 
 class SilverFollowup(BaseModel):
     claim_id: Union[ObjectId, str] = Field(..., description="The DB id of the claim")
@@ -317,6 +453,26 @@ class SilverFollowup(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+    if field_validator is not None:
+        @field_validator('follow_up_date', mode='before')  # type: ignore[misc]
+        @classmethod
+        def _normalize_followup_date(cls, v):
+            if v is None:
+                return v
+            import datetime as _dt
+            if isinstance(v, _dt.datetime):
+                return v.date()
+            if isinstance(v, str):
+                s = v.strip()
+                try:
+                    return _dt.datetime.fromisoformat(s).date()
+                except Exception:
+                    try:
+                        return _dt.date.fromisoformat(s)
+                    except Exception:
+                        return v
+            return v
 
 class LMLogEntry(BaseModel):
     api_type: Literal['completions', 'responses'] = Field(..., description="Type of API call made to the language model")
