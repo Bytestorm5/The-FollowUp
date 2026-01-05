@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getSilverRoundupsCollection, type SilverRoundupDoc, ObjectId } from "@/lib/mongo";
 
+export const dynamic = "force-dynamic";
+
 async function getLatestByType(): Promise<Partial<Record<"daily"|"weekly"|"monthly"|"yearly", SilverRoundupDoc | null>>> {
   const coll = await getSilverRoundupsCollection();
   const types: Array<"daily"|"weekly"|"monthly"|"yearly"> = ["yearly", "monthly", "weekly", "daily"]; // fetch all
