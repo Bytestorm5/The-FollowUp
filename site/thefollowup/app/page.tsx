@@ -3,6 +3,8 @@ import Countdown from "@/components/Countdown";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsCollection, getSilverRoundupsCollection, type BronzeLink, type SilverClaim, type SilverFollowup, ObjectId, type SilverRoundupDoc } from "@/lib/mongo";
 import AdsenseAd from "@/components/AdSenseAd";
 
+export const dynamic = "force-dynamic";
+
 function stripMarkdownLinks(text?: string | null): string {
   if (!text) return "";
   // Remove markdown links while keeping anchor text
