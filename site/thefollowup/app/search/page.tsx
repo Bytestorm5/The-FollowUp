@@ -22,6 +22,13 @@ function stripMarkdownLinks(text?: string | null): string {
     .replace(/<a[^>]*>(.*?)<\/a>/gi, "$1");
 }
 
+function displayHeadline(article: BronzeLink | null | undefined): string {
+  if (!article) return "";
+  const nh = (article as any).neutral_headline;
+  if (typeof nh === "string" && nh.trim()) return nh;
+  return (article as any).title || "";
+}
+
 export default async function SearchPage({
   searchParams,
 }: {
@@ -65,6 +72,7 @@ export default async function SearchPage({
             query: q,
             path: [
               "title",
+              "neutral_headline",
               "clean_markdown",
               "raw_content",
               "summary_paragraph",
@@ -75,7 +83,7 @@ export default async function SearchPage({
           },
         },
       },
-      { $project: { title: 1, date: 1, link: 1, summary_paragraph: 1, score: { $meta: "searchScore" } } },
+      { $project: { title: 1, neutral_headline: 1, date: 1, link: 1, summary_paragraph: 1, score: { $meta: "searchScore" } } },
       { $sort: { score: -1, date: -1 } },
       { $limit: 20 },
     ])
@@ -202,7 +210,7 @@ export default async function SearchPage({
                       return (
                         <li key={`a-${String(a._id)}`} className="card border border-[var(--color-border)] p-4">
                           <Link href={`/article/${a.slug || String(a._id)}`} className="text-lg font-semibold hover:underline" style={{ fontFamily: "var(--font-serif)" }}>
-                            {a.title}
+                            {displayHeadline(a as any)}
                           </Link>
                           {a.summary_paragraph && (
                             <div className="mt-1 text-sm text-foreground/80 line-clamp-3">{stripMarkdownLinks(a.summary_paragraph)}</div>

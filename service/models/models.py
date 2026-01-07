@@ -59,6 +59,7 @@ class MongoArticle(BaseModel):
     id: Optional[ObjectId] = Field(None, description="MongoDB ID of the article")
     slug: Optional[str] = Field(None, description="URL-friendly unique slug for the article")
     title: str = Field(..., description="Title of the news article")
+    neutral_headline: Optional[str] = Field(None, description="Concise, neutral headline generated during enrichment")
     date: datetime.date = Field(..., description="Date of the news article")
     inserted_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow, description="Timestamp of when the article was inserted into the database")
     link: str = Field(..., description="Link to the news article")
@@ -275,6 +276,7 @@ class FollowupAnswersList(BaseModel):
 class ArticleEnrichment(BaseModel):
     clean_markdown: str = Field(..., description="Verbatim clean text formatted as Markdown")
     summary_paragraph: str = Field(..., description="A concise one-paragraph summary")
+    neutral_headline: str = Field(..., description="Concise, neutral headline rewritten from the article")
     key_takeaways: List[str] = Field(..., description="Bullet point key takeaways")
     priority: Literal[5, 4, 3, 2, 1] = Field(..., description="Priority 1..5 where 1=Active Emergency, 2=Breaking News, 3=Important News, 4=Niche News, 5=Operational Updates")
     follow_up_questions: List[str] = Field(..., description="Follow-up questions that would help a layperson understand jargon, organizations, or context in the article")

@@ -54,7 +54,7 @@ def _build_input(article: Dict[str, Any], markdown: str, entities: Dict[str, int
 
 
 def _needs_enrichment(doc: Dict[str, Any]) -> bool:
-    if not (doc.get('clean_markdown') and doc.get('summary_paragraph') and doc.get('key_takeaways')):
+    if not (doc.get('clean_markdown') and doc.get('summary_paragraph') and doc.get('key_takeaways') and doc.get('neutral_headline')):
         return True
     for field in ('follow_up_questions', 'follow_up_question_groups', 'entities'):
         if field not in doc:
@@ -241,6 +241,7 @@ def _fallback_enrich(docs: list[Dict[str, Any]], template: str) -> None:
                 '$set': {
                     'clean_markdown': link_named_entities_in_markdown(md_text or enr.clean_markdown),
                     'summary_paragraph': link_named_entities_in_markdown(enr.summary_paragraph),
+                    'neutral_headline': link_named_entities_in_markdown(getattr(enr, 'neutral_headline', '') or art.get('title', '') or ''),
                     'key_takeaways': key_takeaways,
                     'priority': int(getattr(enr, 'priority', 5)),
                     'follow_up_questions': questions,
@@ -294,6 +295,7 @@ def run(batch: int = 50):
             {'clean_markdown': {'$exists': False}},
             {'summary_paragraph': {'$exists': False}},
             {'key_takeaways': {'$exists': False}},
+            {'neutral_headline': {'$exists': False}},
             {'follow_up_questions': {'$exists': False}},
             {'follow_up_question_groups': {'$exists': False}},
             {'entities': {'$exists': False}},
@@ -437,12 +439,14 @@ def run(batch: int = 50):
             questions = list(getattr(enr, 'follow_up_questions', []) or [])
             groups_raw = getattr(enr, 'follow_up_question_groups', []) or []
             question_groups = _normalize_question_groups(groups_raw, len(questions))
+            original_doc = docs_by_id.get(custom_id, {})
             mongo.bronze_links.update_one(
                 {'_id': docs_by_id[custom_id]['_id']},
                 {'$set': {
                     # Overwrite with deterministic markitdown result
                     'clean_markdown': link_named_entities_in_markdown(md_by_id.get(custom_id, enr.clean_markdown)),
                     'summary_paragraph': link_named_entities_in_markdown(enr.summary_paragraph),
+                    'neutral_headline': link_named_entities_in_markdown(getattr(enr, 'neutral_headline', '') or original_doc.get('title', '') or ''),
                     'key_takeaways': key_takeaways,
                     'priority': int(getattr(enr, 'priority', 5)),
                     'follow_up_questions': questions,
