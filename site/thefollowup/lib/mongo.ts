@@ -65,6 +65,7 @@ export interface SilverClaim {
   slug?: string;
   claim: string;
   verbatim_claim: string;
+  neutral_headline?: string | null;
   type: "goal" | "promise" | "statement";
   completion_condition: string;
   completion_condition_date?: Date | string | null;

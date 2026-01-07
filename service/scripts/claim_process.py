@@ -582,6 +582,10 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
                 if resolved_completion is not None:
                     date_past = resolved_completion < _get_pipeline_today()
 
+                # Ensure a usable neutral headline for downstream consumers
+                if not (claim_doc.get('neutral_headline') or '').strip():
+                    claim_doc['neutral_headline'] = claim_doc.get('claim', '')
+
                 # Build payload for MongoClaim
                 payload = claim_doc.copy()
                 payload['article_id'] = article_id

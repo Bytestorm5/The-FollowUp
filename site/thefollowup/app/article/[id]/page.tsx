@@ -39,6 +39,13 @@ function displayHeadline(doc: BronzeLink | null): string {
   return (doc as any).title || "";
 }
 
+function displayClaimHeadline(claim: SilverClaim | null | undefined): string {
+  if (!claim) return "";
+  const nh = (claim as any).neutral_headline;
+  if (typeof nh === "string" && nh.trim()) return nh;
+  return (claim as any).claim || "";
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const coll = await getBronzeCollection();
@@ -222,7 +229,7 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
                     })()}
                   </span>
                   <Link href={`/claim/${(c as any).slug || (c as any)._id?.toString?.()}`} className="font-medium hover:underline">
-                    {c.claim}
+                    {displayClaimHeadline(c)}
                   </Link>
                   {c.completion_condition_date && (
                     <span className="ml-2 text-[var(--color-status-pending)]">(

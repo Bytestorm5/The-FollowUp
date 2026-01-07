@@ -29,6 +29,13 @@ function displayHeadline(article: BronzeLink | null | undefined): string {
   return (article as any).title || "";
 }
 
+function displayClaimHeadline(claim: SilverClaim | null | undefined): string {
+  if (!claim) return "";
+  const nh = (claim as any).neutral_headline;
+  if (typeof nh === "string" && nh.trim()) return nh;
+  return (claim as any).claim || "";
+}
+
 export default async function SearchPage({
   searchParams,
 }: {
@@ -264,7 +271,7 @@ export default async function SearchPage({
                         </span>
                       </div>
                       <Link href={`/claim/${String((c as any)._id)}`} className="text-lg font-semibold hover:underline" style={{ fontFamily: "var(--font-serif)" }}>
-                        {c.claim}
+                        {displayClaimHeadline(c as any)}
                       </Link>
                       {c.completion_condition && (
                         <div className="mt-1 text-sm text-foreground/80">{c.completion_condition}</div>

@@ -19,7 +19,7 @@ export async function searchClaimIdsByText(q: string): Promise<Set<string>> {
 
     const claimMatches = await claimsColl
       .aggregate([
-        { $search: { index: indexName, text: { query: q, path: ["claim", "verbatim_claim"], fuzzy: {}, matchCriteria: "any" } } },
+        { $search: { index: indexName, text: { query: q, path: ["claim", "verbatim_claim", "neutral_headline"], fuzzy: {}, matchCriteria: "any" } } },
         { $project: { _id: 1 } },
       ])
       .toArray();

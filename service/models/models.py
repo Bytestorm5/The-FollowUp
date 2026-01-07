@@ -141,6 +141,7 @@ Priority = Literal["high", "medium", "low"]
 class ClaimProcessingStep(BaseModel):
     claim: str = Field(..., description="Canonical short description of the extracted claim (may be lightly normalized).")
     verbatim_claim: str = Field(..., description="Exact excerpt from the article supporting the claim (no paraphrase).")
+    neutral_headline: str = Field(..., description="Concise, neutral headline for the claim that is clear to lay readers and avoids partisan framing.")
 
     type: Literal["goal", "promise", "statement"] = Field(
         ...,
@@ -291,6 +292,7 @@ class MongoClaim(BaseModel):
     slug: Optional[str] = Field(None, description="URL-friendly unique slug for the claim")
     claim: str = Field(..., description="The claim being processed")
     verbatim_claim: str = Field(..., description="The verbatim version of the claim")
+    neutral_headline: Optional[str] = Field(None, description="Concise, neutral headline for the claim, suitable for lay readers")
     type: Literal["goal", "promise", "statement"] = Field(..., description="Type of the claim. It can be 'goal', 'promise', or 'statement'. Goals are general objectives, promises are specific commitments with a deadline and a measurable outcome, and statements are factual assertions.")
     completion_condition: str = Field(..., description="Condition(s) that must be met to consider the claim true / goal achieved / promise fulfilled")
     completion_condition_date: Optional[Union[datetime.date, Date_Delta]] = Field(..., description="Date by which the completion condition must be met. Only fill in if the claim specifies a deadline or specific time window (e.g. '90 days', 'in March', etc).")

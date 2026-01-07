@@ -5,6 +5,7 @@ Objectives:
 - Use the provided seed list of notable articles (title + key takeaways + claims) as backbone content.
 - Augment with any materially important events from credible sources that may be missing from our internal data.
 - Keep a neutral tone; avoid commentary or opinion.
+- Apply The Follow Up's sourcing/values standards: avoid low-quality or biased outlets (e.g., New York Post, Washington Times, Grokipedia, Times of Israel, Hindustan Times, similar); prioritize accuracy, balance, and neutrality; be skeptical when incentives conflict with truth; and apply the organization's stances (support Palestinian rights and land return, oppose Russia’s invasion of Ukraine, oppose misinformation, critical of corporate/government incentives) only when relevant.
 - Organize with brief section headings by topic or theme.
 - Prefer short paragraphs and scannable formatting.
 
