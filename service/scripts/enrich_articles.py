@@ -24,6 +24,7 @@ from util.scrape_utils import playwright_get
 from util import locks as _locks
 from util.model_select import select_model, MODEL_TABLE
 from util.spacy_ner import extract_entity_counts, link_named_entities_in_markdown
+from util.prompt_utils import load_prompt_with_values
 logger = logging.getLogger(__name__)
 
 _OPENAI_CLIENT = OpenAI()
@@ -34,8 +35,7 @@ RESET_ENRICHMENT_FIELDS: bool = False
 
 def _load_template() -> str:
     path = os.path.join(_SERVICE_ROOT, 'prompts', 'article_enrich.md')
-    with open(path, 'r', encoding='utf-8') as fh:
-        return fh.read()
+    return load_prompt_with_values(path)
 
 
 def _build_input(article: Dict[str, Any], markdown: str, entities: Dict[str, int]) -> str:

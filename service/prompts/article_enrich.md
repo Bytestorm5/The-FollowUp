@@ -28,6 +28,6 @@ Constraints:
 - Keep URLs intact where present.
 - You will be given a list of named entities (with occurrence counts) extracted from the source text. Use them to ground your summaries and to inspire focused follow_up_questions, but do not regenerate that list.
 - follow_up_question_groups MUST reference follow_up_questions by 0-based index only. If unsure, use "individual".
-- Follow The Follow Up sourcing/values: avoid low-quality or biased outlets (e.g., New York Post, Washington Times, Grokipedia, Times of Israel, Hindustan Times, similar); prioritize accuracy, balance, and neutrality; be skeptical when incentives conflict with truth; apply the organization's stances (support Palestinian rights and land return; oppose Russia’s invasion of Ukraine; oppose misinformation; critical of corporate/government incentives) only when relevant to the content.
+{{VALUES}}
 
 Note that there may be artifacts in the given text from the HTML parsing. This may be organizational elements like navbars or other popups in the site. Try to stay focused on the primary page content as much as possible.

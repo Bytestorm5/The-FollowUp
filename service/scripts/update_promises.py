@@ -24,6 +24,7 @@ from util import mongo
 from util.llm_web import run_with_search
 from util.model_select import MODEL_TABLE
 from util.spacy_ner import link_named_entities_in_markdown
+from util.prompt_utils import load_prompt_with_values
 from models import MongoClaim, Date_Delta, SilverUpdate, MongoArticle, ModelResponseOutput, SilverFollowup, FactCheckResponseOutput
 
 try:
@@ -463,18 +464,15 @@ def ensure_full_schedule_for_claim(raw: Any, claim: MongoClaim, today: datetime.
 
 def _checkin_template() -> str:
     tpl_path = os.path.join(_REPO_ROOT, 'prompts', 'regular_checkin.md')
-    with open(tpl_path, 'r', encoding='utf-8') as fh:
-        return fh.read()
+    return load_prompt_with_values(tpl_path)
 
 def _endpoint_template() -> str:
     tpl_path = os.path.join(_REPO_ROOT, 'prompts', 'endpoint_checkin.md')
-    with open(tpl_path, 'r', encoding='utf-8') as fh:
-        return fh.read()
+    return load_prompt_with_values(tpl_path)
 
 def _fact_check_template() -> str:
     tpl_path = os.path.join(_REPO_ROOT, 'prompts', 'fact_check.md')
-    with open(tpl_path, 'r', encoding='utf-8') as fh:
-        return fh.read()
+    return load_prompt_with_values(tpl_path)
 
 def main():
     # Chump check: convert 'promise' records with null completion_condition_date to 'goal'

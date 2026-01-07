@@ -33,6 +33,7 @@ from util.mongo import normalize_dates as _normalize_dates
 from util import openai_batch as obatch
 from util.schema_outline import compact_outline_from_model
 from util.model_select import select_model, MODEL_TABLE
+from util.prompt_utils import load_prompt_with_values
 logger = logging.getLogger(__name__)
 
 
@@ -59,8 +60,7 @@ def _sanitize_schema_for_strict(schema: Any) -> Any:
 
 def _load_prompt_template() -> str:
     tpl_path = os.path.join(_REPO_ROOT, 'prompts', 'claim_processing.md')
-    with open(tpl_path, 'r', encoding='utf-8') as fh:
-        return fh.read()
+    return load_prompt_with_values(tpl_path)
 
 
 def _build_requests(
