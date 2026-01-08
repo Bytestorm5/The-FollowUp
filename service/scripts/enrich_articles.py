@@ -54,7 +54,7 @@ def _build_input(article: Dict[str, Any], markdown: str, entities: Dict[str, int
 
 
 def _needs_enrichment(doc: Dict[str, Any]) -> bool:
-    if not (doc.get('clean_markdown') and doc.get('summary_paragraph') and doc.get('key_takeaways') and doc.get('neutral_headline')):
+    if not (doc.get('clean_markdown') and doc.get('summary_paragraph') and doc.get('key_takeaways')):
         return True
     for field in ('follow_up_questions', 'follow_up_question_groups', 'entities'):
         if field not in doc:
@@ -295,7 +295,6 @@ def run(batch: int = 50):
             {'clean_markdown': {'$exists': False}},
             {'summary_paragraph': {'$exists': False}},
             {'key_takeaways': {'$exists': False}},
-            {'neutral_headline': {'$exists': False}},
             {'follow_up_questions': {'$exists': False}},
             {'follow_up_question_groups': {'$exists': False}},
             {'entities': {'$exists': False}},
