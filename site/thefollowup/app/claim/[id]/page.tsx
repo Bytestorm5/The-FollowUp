@@ -37,6 +37,13 @@ function asUTCStart(isoOrDate: string | Date): string {
   return utc.toISOString();
 }
 
+function displayClaimHeadline(claim: SilverClaim | null | undefined): string {
+  if (!claim) return "";
+  const nh = (claim as any).neutral_headline;
+  if (typeof nh === "string" && nh.trim()) return nh;
+  return (claim as any).claim || "";
+}
+
 export default async function ClaimPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
@@ -175,7 +182,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
         })()}
         <div className="dateline mb-1">{claim.type.toUpperCase()}</div>
         <h1 className="text-3xl font-semibold tracking-tight" style={{ fontFamily: "var(--font-serif)" }}>
-          {claim.claim}
+          {displayClaimHeadline(claim)}
         </h1>
         {latest && (() => {
           const mo: any = (latest as any).model_output;
@@ -388,7 +395,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     sourceSummary = (art as any)?.summary_paragraph ?? null;
   } catch {}
 
-  const title = (claim as any).claim;
+  const title = displayClaimHeadline(claim) || (claim as any).claim;
   const description = sourceSummary || (claim as any).completion_condition || "";
   const path = `/claim/${(claim as any).slug || String((claim as any)._id)}`;
   const url = absUrl(path);

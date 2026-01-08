@@ -39,6 +39,7 @@ export interface BronzeLink {
   tags?: string[];
   raw_content?: string;
   process_posturing?: boolean;
+  neutral_headline?: string | null;
   clean_markdown?: string | null;
   summary_paragraph?: string | null;
   key_takeaways?: string[] | null;
@@ -64,6 +65,7 @@ export interface SilverClaim {
   slug?: string;
   claim: string;
   verbatim_claim: string;
+  neutral_headline?: string | null;
   type: "goal" | "promise" | "statement";
   completion_condition: string;
   completion_condition_date?: Date | string | null;

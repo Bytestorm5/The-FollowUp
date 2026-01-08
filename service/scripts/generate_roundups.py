@@ -14,6 +14,7 @@ from util.slug import generate_unique_slug
 from util.llm_web import run_with_search, ToolSet
 from util.model_select import MODEL_TABLE
 from util.timezone import pipeline_today
+from util.prompt_utils import load_prompt_with_values
 from models import SilverRoundup, RoundupSeedArticle, RoundupResponseOutput
 
 logger = logging.getLogger(__name__)
@@ -206,8 +207,7 @@ def _build_seed_markdown(seed_articles: List[RoundupSeedArticle]) -> str:
 
 def _load_roundup_template() -> str:
     path = os.path.join(_SERVICE_ROOT, 'prompts', 'roundup.md')
-    with open(path, 'r', encoding='utf-8') as fh:
-        return fh.read()
+    return load_prompt_with_values(path)
 
 
 def _generate_roundup(rtype: str, start: datetime.date, end: datetime.date, template: str) -> Optional[Dict[str, Any]]:

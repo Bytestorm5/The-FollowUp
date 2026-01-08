@@ -72,6 +72,20 @@ function priorityLabel(p?: number | null): string | null {
   return null;
 }
 
+function displayHeadline(article: BronzeLink | undefined | null): string {
+  if (!article) return "";
+  const nh = (article as any).neutral_headline;
+  if (typeof nh === "string" && nh.trim()) return nh;
+  return (article as any).title || "";
+}
+
+function displayClaimHeadline(claim: SilverClaim | undefined | null): string {
+  if (!claim) return "";
+  const nh = (claim as any).neutral_headline;
+  if (typeof nh === "string" && nh.trim()) return nh;
+  return (claim as any).claim || "";
+}
+
 export default async function Home() {
   // Fetch a pool of potential front-page articles
   const coll = await getBronzeCollection();
@@ -116,7 +130,7 @@ export default async function Home() {
     .map((c: any) => {
       const dueRaw = (c as any).completion_condition_date || earliestFollowupById.get(String(c._id));
       const dueISO = dueRaw ? asUTCStart(dueRaw) : "";
-      return { id: String(c._id), slug: (c as any).slug || undefined, text: c.claim as string, dueISO };
+      return { id: String(c._id), slug: (c as any).slug || undefined, text: displayClaimHeadline(c) as string, dueISO };
     })
     .filter((r) => !!r.dueISO && new Date(r.dueISO).getTime() > now.getTime())
     .sort((a, b) => new Date(a.dueISO).getTime() - new Date(b.dueISO).getTime())
@@ -180,7 +194,7 @@ export default async function Home() {
                 )}
                 <h2 className="text-3xl font-semibold text-primary" style={{ fontFamily: "var(--font-serif)" }}>
                   <Link href={`/article/${(hero as any).slug || (hero as any)._id?.toString?.()}`} className="hover:underline">
-                    {hero.title}
+                    {displayHeadline(hero)}
                   </Link>
                 </h2>
                 {hero.summary_paragraph && (
@@ -211,7 +225,7 @@ export default async function Home() {
                     )}
                     <h3 className="text-lg font-semibold text-primary" style={{ fontFamily: "var(--font-serif)" }}>
                       <Link href={`/article/${(m as any).slug || (m as any)._id?.toString?.()}`} className="hover:underline">
-                        {m.title}
+                        {displayHeadline(m)}
                       </Link>
                     </h3>
                     {m.summary_paragraph && (

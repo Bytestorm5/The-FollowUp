@@ -5,6 +5,7 @@ Objectives:
 - Use the provided seed list of notable articles (title + key takeaways + claims) as backbone content.
 - Augment with any materially important events from credible sources that may be missing from our internal data.
 - Keep a neutral tone; avoid commentary or opinion.
+{{VALUES}}
 - Organize with brief section headings by topic or theme.
 - Prefer short paragraphs and scannable formatting.
 

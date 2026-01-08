@@ -33,6 +33,7 @@ from util.mongo import normalize_dates as _normalize_dates
 from util import openai_batch as obatch
 from util.schema_outline import compact_outline_from_model
 from util.model_select import select_model, MODEL_TABLE
+from util.prompt_utils import load_prompt_with_values
 logger = logging.getLogger(__name__)
 
 
@@ -59,8 +60,7 @@ def _sanitize_schema_for_strict(schema: Any) -> Any:
 
 def _load_prompt_template() -> str:
     tpl_path = os.path.join(_REPO_ROOT, 'prompts', 'claim_processing.md')
-    with open(tpl_path, 'r', encoding='utf-8') as fh:
-        return fh.read()
+    return load_prompt_with_values(tpl_path)
 
 
 def _build_requests(
@@ -581,6 +581,10 @@ def run_batch_process(batch_size: int = 20, poll_interval: int = 5):
                 date_past = False
                 if resolved_completion is not None:
                     date_past = resolved_completion < _get_pipeline_today()
+
+                # Ensure a usable neutral headline for downstream consumers
+                if not (claim_doc.get('neutral_headline') or '').strip():
+                    claim_doc['neutral_headline'] = claim_doc.get('claim', '')
 
                 # Build payload for MongoClaim
                 payload = claim_doc.copy()

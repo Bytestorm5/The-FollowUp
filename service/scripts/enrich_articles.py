@@ -24,6 +24,7 @@ from util.scrape_utils import playwright_get
 from util import locks as _locks
 from util.model_select import select_model, MODEL_TABLE
 from util.spacy_ner import extract_entity_counts, link_named_entities_in_markdown
+from util.prompt_utils import load_prompt_with_values
 logger = logging.getLogger(__name__)
 
 _OPENAI_CLIENT = OpenAI()
@@ -34,8 +35,7 @@ RESET_ENRICHMENT_FIELDS: bool = False
 
 def _load_template() -> str:
     path = os.path.join(_SERVICE_ROOT, 'prompts', 'article_enrich.md')
-    with open(path, 'r', encoding='utf-8') as fh:
-        return fh.read()
+    return load_prompt_with_values(path)
 
 
 def _build_input(article: Dict[str, Any], markdown: str, entities: Dict[str, int]) -> str:
@@ -241,6 +241,7 @@ def _fallback_enrich(docs: list[Dict[str, Any]], template: str) -> None:
                 '$set': {
                     'clean_markdown': link_named_entities_in_markdown(md_text or enr.clean_markdown),
                     'summary_paragraph': link_named_entities_in_markdown(enr.summary_paragraph),
+                    'neutral_headline': link_named_entities_in_markdown(getattr(enr, 'neutral_headline', '') or art.get('title', '') or ''),
                     'key_takeaways': key_takeaways,
                     'priority': int(getattr(enr, 'priority', 5)),
                     'follow_up_questions': questions,
@@ -437,12 +438,14 @@ def run(batch: int = 50):
             questions = list(getattr(enr, 'follow_up_questions', []) or [])
             groups_raw = getattr(enr, 'follow_up_question_groups', []) or []
             question_groups = _normalize_question_groups(groups_raw, len(questions))
+            original_doc = docs_by_id.get(custom_id, {})
             mongo.bronze_links.update_one(
                 {'_id': docs_by_id[custom_id]['_id']},
                 {'$set': {
                     # Overwrite with deterministic markitdown result
                     'clean_markdown': link_named_entities_in_markdown(md_by_id.get(custom_id, enr.clean_markdown)),
                     'summary_paragraph': link_named_entities_in_markdown(enr.summary_paragraph),
+                    'neutral_headline': link_named_entities_in_markdown(getattr(enr, 'neutral_headline', '') or original_doc.get('title', '') or ''),
                     'key_takeaways': key_takeaways,
                     'priority': int(getattr(enr, 'priority', 5)),
                     'follow_up_questions': questions,

@@ -26,6 +26,12 @@ function getDomain(url: string): string | null {
   }
 }
 
+function displayHeadline(article: BronzeLink): string {
+  const nh = (article as any).neutral_headline;
+  if (typeof nh === "string" && nh.trim()) return nh;
+  return article.title;
+}
+
 export default async function FeedPage({
   searchParams,
 }: {
@@ -98,7 +104,7 @@ export default async function FeedPage({
                   </div>
                   <h2 className="mt-1 text-xl font-semibold text-primary" style={{ fontFamily: "var(--font-serif)" }}>
                     <Link href={`/article/${(it as any).slug || (it as any)._id?.toString?.()}`} className="hover:underline">
-                      {it.title}
+                      {displayHeadline(it)}
                     </Link>
                   </h2>
                   <div className="mt-2 text-sm">

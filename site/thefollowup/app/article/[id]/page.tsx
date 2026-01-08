@@ -32,6 +32,20 @@ function typeLabel(t: SilverClaim["type"]) {
   return "Statement";
 }
 
+function displayHeadline(doc: BronzeLink | null): string {
+  if (!doc) return "";
+  const nh = (doc as any).neutral_headline;
+  if (typeof nh === "string" && nh.trim()) return nh;
+  return (doc as any).title || "";
+}
+
+function displayClaimHeadline(claim: SilverClaim | null | undefined): string {
+  if (!claim) return "";
+  const nh = (claim as any).neutral_headline;
+  if (typeof nh === "string" && nh.trim()) return nh;
+  return (claim as any).claim || "";
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const coll = await getBronzeCollection();
@@ -46,7 +60,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
   if (!doc) return {};
 
-  const title = doc.title;
+  const title = displayHeadline(doc) || doc.title;
   const description = (doc as any).summary_paragraph || (Array.isArray((doc as any).key_takeaways) ? (doc as any).key_takeaways[0] : "");
   const path = `/article/${(doc as any).slug || String((doc as any)._id)}`;
   const url = absUrl(path);
@@ -146,7 +160,7 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
             '@context': 'https://schema.org',
             '@type': 'Article',
             mainEntityOfPage: url,
-            headline: (doc as any).title,
+            headline: displayHeadline(doc) || undefined,
             datePublished: dateISO,
             dateModified: dateISO,
             author: {
@@ -174,7 +188,7 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
           ) : null;
         })()}
         <h1 className="text-3xl font-semibold tracking-tight" style={{ fontFamily: "var(--font-serif)" }}>
-          {doc.title}
+          {displayHeadline(doc)}
         </h1>
         <div className="mt-3">
           <PostPoll postId={String((doc as any)._id)} postType="article" />
@@ -215,7 +229,7 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
                     })()}
                   </span>
                   <Link href={`/claim/${(c as any).slug || (c as any)._id?.toString?.()}`} className="font-medium hover:underline">
-                    {c.claim}
+                    {displayClaimHeadline(c)}
                   </Link>
                   {c.completion_condition_date && (
                     <span className="ml-2 text-[var(--color-status-pending)]">(

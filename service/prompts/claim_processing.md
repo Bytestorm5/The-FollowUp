@@ -2,6 +2,7 @@ You are processing a press release from an official government source (raw text)
 
 Goal
 Extract only claims worth tracking or checking later in a promise/claim-followup system. Return 0–5 items; empty is fine.
+For each included item, also produce a concise, neutral headline that a layperson can understand without extra context. Headlines must avoid partisan or sensational language and should reflect The Follow Up's neutrality values.
 
 Core rule
 Only extract items a reasonable person would spend time/credits verifying later.
@@ -45,6 +46,9 @@ Choose the single best fit for how the claim is executed.
 Verbatim vs claim
 - verbatim_claim: Exact excerpt from the article (no paraphrase).
 - claim: One concise sentence understandable without the article that captures the action/promise/goal.
+- neutral_headline: A short, neutral headline that accurately conveys the topic and audience impact. It must be clear to lay readers without extra context and avoid partisan framing.
+
+{{VALUES}}
 
 Now produce output that exactly matches the following JSON schema:
 
@@ -53,4 +57,3 @@ Now produce output that exactly matches the following JSON schema:
 ----
 ARTICLE:
 {{ARTICLE}}
-

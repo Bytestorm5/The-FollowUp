@@ -59,6 +59,7 @@ class MongoArticle(BaseModel):
     id: Optional[ObjectId] = Field(None, description="MongoDB ID of the article")
     slug: Optional[str] = Field(None, description="URL-friendly unique slug for the article")
     title: str = Field(..., description="Title of the news article")
+    neutral_headline: Optional[str] = Field(None, description="Concise, neutral headline generated during enrichment")
     date: datetime.date = Field(..., description="Date of the news article")
     inserted_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow, description="Timestamp of when the article was inserted into the database")
     link: str = Field(..., description="Link to the news article")
@@ -140,6 +141,7 @@ Priority = Literal["high", "medium", "low"]
 class ClaimProcessingStep(BaseModel):
     claim: str = Field(..., description="Canonical short description of the extracted claim (may be lightly normalized).")
     verbatim_claim: str = Field(..., description="Exact excerpt from the article supporting the claim (no paraphrase).")
+    neutral_headline: str = Field(..., description="Concise, neutral headline for the claim that is clear to lay readers and avoids partisan framing.")
 
     type: Literal["goal", "promise", "statement"] = Field(
         ...,
@@ -275,6 +277,7 @@ class FollowupAnswersList(BaseModel):
 class ArticleEnrichment(BaseModel):
     clean_markdown: str = Field(..., description="Verbatim clean text formatted as Markdown")
     summary_paragraph: str = Field(..., description="A concise one-paragraph summary")
+    neutral_headline: str = Field(..., description="Concise, neutral headline rewritten from the article")
     key_takeaways: List[str] = Field(..., description="Bullet point key takeaways")
     priority: Literal[5, 4, 3, 2, 1] = Field(..., description="Priority 1..5 where 1=Active Emergency, 2=Breaking News, 3=Important News, 4=Niche News, 5=Operational Updates")
     follow_up_questions: List[str] = Field(..., description="Follow-up questions that would help a layperson understand jargon, organizations, or context in the article")
@@ -289,6 +292,7 @@ class MongoClaim(BaseModel):
     slug: Optional[str] = Field(None, description="URL-friendly unique slug for the claim")
     claim: str = Field(..., description="The claim being processed")
     verbatim_claim: str = Field(..., description="The verbatim version of the claim")
+    neutral_headline: Optional[str] = Field(None, description="Concise, neutral headline for the claim, suitable for lay readers")
     type: Literal["goal", "promise", "statement"] = Field(..., description="Type of the claim. It can be 'goal', 'promise', or 'statement'. Goals are general objectives, promises are specific commitments with a deadline and a measurable outcome, and statements are factual assertions.")
     completion_condition: str = Field(..., description="Condition(s) that must be met to consider the claim true / goal achieved / promise fulfilled")
     completion_condition_date: Optional[Union[datetime.date, Date_Delta]] = Field(..., description="Date by which the completion condition must be met. Only fill in if the claim specifies a deadline or specific time window (e.g. '90 days', 'in March', etc).")
