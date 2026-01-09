@@ -9,6 +9,7 @@ import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsColle
 import AdsenseAd from "@/components/AdSenseAd";
 import { absUrl } from "@/lib/seo";
 import { getVerdictInfo } from "@/lib/factcheck";
+import { stripInlineMarkdown } from "@/lib/text";
 import PostPoll from "@/components/PostPoll";
 import Comments from "@/components/Comments";
 import TrackVisit from "@/components/TrackVisit";
@@ -40,8 +41,8 @@ function asUTCStart(isoOrDate: string | Date): string {
 function displayClaimHeadline(claim: SilverClaim | null | undefined): string {
   if (!claim) return "";
   const nh = (claim as any).neutral_headline;
-  if (typeof nh === "string" && nh.trim()) return nh;
-  return (claim as any).claim || "";
+  if (typeof nh === "string" && nh.trim()) return stripInlineMarkdown(nh);
+  return stripInlineMarkdown((claim as any).claim || "");
 }
 
 export default async function ClaimPage({ params }: { params: Promise<{ id: string }> }) {

@@ -2,16 +2,9 @@ import Link from "next/link";
 import Countdown from "@/components/Countdown";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverFollowupsCollection, getSilverRoundupsCollection, type BronzeLink, type SilverClaim, type SilverFollowup, ObjectId, type SilverRoundupDoc } from "@/lib/mongo";
 import AdsenseAd from "@/components/AdSenseAd";
+import { stripInlineMarkdown } from "@/lib/text";
 
 export const dynamic = "force-dynamic";
-
-function stripMarkdownLinks(text?: string | null): string {
-  if (!text) return "";
-  // Remove markdown links while keeping anchor text
-  return text
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/<a[^>]*>(.*?)<\/a>/gi, "$1");
-}
 
 async function pickHeroAndMediumsByHeuristic(items: BronzeLink[], claimsColl: Awaited<ReturnType<typeof getSilverClaimsCollection>>, maxMediums = 6) {
   if (!items || items.length === 0) return { hero: undefined as any, mediums: [] as BronzeLink[] };
@@ -75,15 +68,15 @@ function priorityLabel(p?: number | null): string | null {
 function displayHeadline(article: BronzeLink | undefined | null): string {
   if (!article) return "";
   const nh = (article as any).neutral_headline;
-  if (typeof nh === "string" && nh.trim()) return nh;
-  return (article as any).title || "";
+  if (typeof nh === "string" && nh.trim()) return stripInlineMarkdown(nh);
+  return stripInlineMarkdown((article as any).title || "");
 }
 
 function displayClaimHeadline(claim: SilverClaim | undefined | null): string {
   if (!claim) return "";
   const nh = (claim as any).neutral_headline;
-  if (typeof nh === "string" && nh.trim()) return nh;
-  return (claim as any).claim || "";
+  if (typeof nh === "string" && nh.trim()) return stripInlineMarkdown(nh);
+  return stripInlineMarkdown((claim as any).claim || "");
 }
 
 export default async function Home() {
@@ -198,7 +191,7 @@ export default async function Home() {
                   </Link>
                 </h2>
                 {hero.summary_paragraph && (
-                  <p className="mt-3 text-foreground/80 text-base">{stripMarkdownLinks(hero.summary_paragraph)}</p>
+                  <p className="mt-3 text-foreground/80 text-base">{stripInlineMarkdown(hero.summary_paragraph)}</p>
                 )}
               </article>
             )}
@@ -229,7 +222,7 @@ export default async function Home() {
                       </Link>
                     </h3>
                     {m.summary_paragraph && (
-                      <p className="mt-2 line-clamp-3 text-sm text-foreground/80">{stripMarkdownLinks(m.summary_paragraph)}</p>
+                      <p className="mt-2 line-clamp-3 text-sm text-foreground/80">{stripInlineMarkdown(m.summary_paragraph)}</p>
                     )}
                   </article>
                 ))}

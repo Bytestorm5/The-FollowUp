@@ -12,28 +12,22 @@ import {
 } from "@/lib/mongo";
 import { searchClaimIdsByText } from "@/lib/search";
 import AdsenseAd from "@/components/AdSenseAd";
+import { stripInlineMarkdown } from "@/lib/text";
 
 export const dynamic = "force-dynamic";
-
-function stripMarkdownLinks(text?: string | null): string {
-  if (!text) return "";
-  return text
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/<a[^>]*>(.*?)<\/a>/gi, "$1");
-}
 
 function displayHeadline(article: BronzeLink | null | undefined): string {
   if (!article) return "";
   const nh = (article as any).neutral_headline;
-  if (typeof nh === "string" && nh.trim()) return nh;
-  return (article as any).title || "";
+  if (typeof nh === "string" && nh.trim()) return stripInlineMarkdown(nh);
+  return stripInlineMarkdown((article as any).title || "");
 }
 
 function displayClaimHeadline(claim: SilverClaim | null | undefined): string {
   if (!claim) return "";
   const nh = (claim as any).neutral_headline;
-  if (typeof nh === "string" && nh.trim()) return nh;
-  return (claim as any).claim || "";
+  if (typeof nh === "string" && nh.trim()) return stripInlineMarkdown(nh);
+  return stripInlineMarkdown((claim as any).claim || "");
 }
 
 export default async function SearchPage({
@@ -220,7 +214,7 @@ export default async function SearchPage({
                             {displayHeadline(a as any)}
                           </Link>
                           {a.summary_paragraph && (
-                            <div className="mt-1 text-sm text-foreground/80 line-clamp-3">{stripMarkdownLinks(a.summary_paragraph)}</div>
+                            <div className="mt-1 text-sm text-foreground/80 line-clamp-3">{stripInlineMarkdown(a.summary_paragraph)}</div>
                           )}
                           <div className="mt-2 text-xs text-foreground/60">{new Date(a.date as any).toLocaleDateString()}</div>
                         </li>

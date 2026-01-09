@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getBronzeCollection, type BronzeLink } from "@/lib/mongo";
 import Pagination from "@/components/Pagination";
 import AdsenseAd from "@/components/AdSenseAd";
+import { stripInlineMarkdown } from "@/lib/text";
 
 export const dynamic = "force-dynamic";
 
@@ -28,8 +29,8 @@ function getDomain(url: string): string | null {
 
 function displayHeadline(article: BronzeLink): string {
   const nh = (article as any).neutral_headline;
-  if (typeof nh === "string" && nh.trim()) return nh;
-  return article.title;
+  if (typeof nh === "string" && nh.trim()) return stripInlineMarkdown(nh);
+  return stripInlineMarkdown(article.title);
 }
 
 export default async function FeedPage({
