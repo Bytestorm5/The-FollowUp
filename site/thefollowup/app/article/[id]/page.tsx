@@ -8,6 +8,7 @@ import { mapVerdictDisplay } from "@/lib/verdict";
 import AdsenseAd from "@/components/AdSenseAd";
 import { getBronzeCollection, getSilverClaimsCollection, getSilverUpdatesCollection, ObjectId, type BronzeLink, type SilverClaim, type SilverUpdate } from "@/lib/mongo";
 import { absUrl } from "@/lib/seo";
+import { stripInlineMarkdown } from "@/lib/text";
 import PostPoll from "@/components/PostPoll";
 import Comments from "@/components/Comments";
 import TrackVisit from "@/components/TrackVisit";
@@ -35,15 +36,15 @@ function typeLabel(t: SilverClaim["type"]) {
 function displayHeadline(doc: BronzeLink | null): string {
   if (!doc) return "";
   const nh = (doc as any).neutral_headline;
-  if (typeof nh === "string" && nh.trim()) return nh;
-  return (doc as any).title || "";
+  if (typeof nh === "string" && nh.trim()) return stripInlineMarkdown(nh);
+  return stripInlineMarkdown((doc as any).title || "");
 }
 
 function displayClaimHeadline(claim: SilverClaim | null | undefined): string {
   if (!claim) return "";
   const nh = (claim as any).neutral_headline;
-  if (typeof nh === "string" && nh.trim()) return nh;
-  return (claim as any).claim || "";
+  if (typeof nh === "string" && nh.trim()) return stripInlineMarkdown(nh);
+  return stripInlineMarkdown((claim as any).claim || "");
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {

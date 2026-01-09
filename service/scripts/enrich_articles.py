@@ -241,7 +241,7 @@ def _fallback_enrich(docs: list[Dict[str, Any]], template: str) -> None:
                 '$set': {
                     'clean_markdown': link_named_entities_in_markdown(md_text or enr.clean_markdown),
                     'summary_paragraph': link_named_entities_in_markdown(enr.summary_paragraph),
-                    'neutral_headline': link_named_entities_in_markdown(getattr(enr, 'neutral_headline', '') or art.get('title', '') or ''),
+                    'neutral_headline': getattr(enr, 'neutral_headline', '') or art.get('title', '') or '',
                     'key_takeaways': key_takeaways,
                     'priority': int(getattr(enr, 'priority', 5)),
                     'follow_up_questions': questions,
@@ -445,7 +445,7 @@ def run(batch: int = 50):
                     # Overwrite with deterministic markitdown result
                     'clean_markdown': link_named_entities_in_markdown(md_by_id.get(custom_id, enr.clean_markdown)),
                     'summary_paragraph': link_named_entities_in_markdown(enr.summary_paragraph),
-                    'neutral_headline': link_named_entities_in_markdown(getattr(enr, 'neutral_headline', '') or original_doc.get('title', '') or ''),
+                    'neutral_headline': getattr(enr, 'neutral_headline', '') or original_doc.get('title', '') or '',
                     'key_takeaways': key_takeaways,
                     'priority': int(getattr(enr, 'priority', 5)),
                     'follow_up_questions': questions,
