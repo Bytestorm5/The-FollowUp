@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import Script from "next/script";
 import Countdown from "@/components/Countdown";
@@ -59,6 +59,11 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   }
 
   if (!claim) return notFound();
+
+  // Canonical redirect to slug if different
+  if ((claim as any).slug && (claim as any).slug !== id) {
+    redirect(`/claim/${(claim as any).slug}`);
+  }
 
   // Source article summary
   let sourceSummary: string | null = null;

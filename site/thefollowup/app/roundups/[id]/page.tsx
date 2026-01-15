@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -26,6 +26,11 @@ export default async function RoundupDetail({ params }: { params: Promise<{ id: 
     }
   }
   if (!doc) return notFound();
+
+  // Canonical redirect to slug if different
+  if ((doc as any).slug && (doc as any).slug !== id) {
+    redirect(`/roundups/${(doc as any).slug}`);
+  }
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
