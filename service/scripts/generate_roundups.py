@@ -245,6 +245,7 @@ def _generate_roundup(rtype: str, start: datetime.date, end: datetime.date, temp
                 text_format=RoundupResponseOutput,
                 task_system=template,
                 tool_choices=[ToolSet.WEB_SEARCH, ToolSet.NEWS_SEARCH, ToolSet.INTERNAL_SEARCH],
+                include_editorial_policy=True,
             )
         else:
             out = run_with_search(
@@ -252,6 +253,7 @@ def _generate_roundup(rtype: str, start: datetime.date, end: datetime.date, temp
                 text_format=RoundupResponseOutput,
                 task_system=template,
                 tool_choices=[ToolSet.WEB_SEARCH, ToolSet.NEWS_SEARCH, ToolSet.INTERNAL_SEARCH],
+                include_editorial_policy=True,
             )
     except Exception:
         logger.exception('LLM call failed for roundup %s %s..%s', rtype, start, end)
