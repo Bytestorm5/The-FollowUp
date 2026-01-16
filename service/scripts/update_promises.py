@@ -782,12 +782,25 @@ def main():
         try:
             # Choose schema based on custom id (statements use fact check schema)
             schema = FactCheckResponseOutput if is_factcheck else ModelResponseOutput
+            include_editorial_policy = bool(is_factcheck or is_followup)
 
             if model and effort:
-                run_res = run_with_search(content_str, model=model, effort=effort, text_format=schema, task_system=task_system)
+                run_res = run_with_search(
+                    content_str,
+                    model=model,
+                    effort=effort,
+                    text_format=schema,
+                    task_system=task_system,
+                    include_editorial_policy=include_editorial_policy,
+                )
             elif not model and not effort:
                 # Defer to selector inside run_with_search
-                run_res = run_with_search(content_str, text_format=schema, task_system=task_system)
+                run_res = run_with_search(
+                    content_str,
+                    text_format=schema,
+                    task_system=task_system,
+                    include_editorial_policy=include_editorial_policy,
+                )
             else:
                 raise ValueError("Invalid request config: model/effort must be both present or both omitted")
             model_text = (run_res.text or '').strip()
