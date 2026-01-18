@@ -64,31 +64,49 @@ export default async function SearchPage({
 
   // Fetch article results via Atlas Search
   const bronze = await getBronzeCollection();
-  const articles = (await bronze
-    .aggregate< BronzeLink & { score?: number } >([
-      {
-        $search: {
-          index: indexName,
-          text: {
-            query: q,
-            path: [
-              "title",
-              "neutral_headline",
-              "clean_markdown",
-              "raw_content",
-              "summary_paragraph",
-              "key_takeaways",
-            ],
-            fuzzy: {},
-            matchCriteria: "any",
+  let articles: (BronzeLink & { score?: number })[] = [];
+  try {
+    articles = (await bronze
+      .aggregate< BronzeLink & { score?: number } >([
+        {
+          $search: {
+            index: indexName,
+            text: {
+              query: q,
+              path: [
+                "title",
+                "neutral_headline",
+                "clean_markdown",
+                "raw_content",
+                "summary_paragraph",
+                "key_takeaways",
+              ],
+              fuzzy: {},
+              matchCriteria: "any",
+            },
           },
         },
-      },
-      { $project: { title: 1, neutral_headline: 1, date: 1, link: 1, summary_paragraph: 1, score: { $meta: "searchScore" } } },
-      { $sort: { score: -1, date: -1 } },
-      { $limit: 20 },
-    ])
-    .toArray()) as (BronzeLink & { score?: number })[];
+        { $project: { title: 1, neutral_headline: 1, date: 1, link: 1, summary_paragraph: 1, score: { $meta: "searchScore" } } },
+        { $sort: { score: -1, date: -1 } },
+        { $limit: 20 },
+      ])
+      .toArray()) as (BronzeLink & { score?: number })[];
+  } catch {
+    // Fallback regex search if Atlas Search index missing
+    articles = (await bronze
+      .find({ $or: [
+        { title: { $regex: q, $options: "i" } },
+        { neutral_headline: { $regex: q, $options: "i" } },
+        { clean_markdown: { $regex: q, $options: "i" } },
+        { raw_content: { $regex: q, $options: "i" } },
+        { summary_paragraph: { $regex: q, $options: "i" } },
+        { key_takeaways: { $regex: q, $options: "i" } },
+      ] })
+      .project({ title: 1, neutral_headline: 1, date: 1, link: 1, summary_paragraph: 1 })
+      .sort({ date: -1 })
+      .limit(20)
+      .toArray()) as (BronzeLink & { score?: number })[];
+  }
 
   // Fetch roundup results via Atlas Search (title + body)
   const roundupsColl = await getSilverRoundupsCollection();
