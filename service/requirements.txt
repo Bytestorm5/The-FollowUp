@@ -10,3 +10,6 @@ rss-parser
 ddgs
 markitdown[all]
 spacy
+openai-whisper
+yt-dlp
+torch

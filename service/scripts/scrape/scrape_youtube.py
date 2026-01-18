@@ -8,13 +8,12 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, Iterable, List, Optional
 
 import requests
-from markitdown import MarkItDown
 
 _HERE = os.path.dirname(__file__)
 _SERVICE_ROOT = os.path.abspath(os.path.join(_HERE, '..', '..'))
 if _SERVICE_ROOT not in sys.path:
     sys.path.insert(0, _SERVICE_ROOT)
-
+from util.whisper_transcribe import extract_whisper_text
 from models import ArticleLink, LinkAggregationResult
 
 LOGGER = logging.getLogger(__name__)
@@ -29,6 +28,7 @@ def _load_channels() -> List[Dict[str, Any]]:
         {
             "name": "White House",
             "channel_url": "https://www.youtube.com/@WhiteHouse",
+            #"channel_id": "UCYxRlFDqcWM4y7FfpiAN3KQ",
             "tags": ["White House", "YouTube"]
         }
     ]
@@ -37,6 +37,7 @@ def _load_channels() -> List[Dict[str, Any]]:
 
 def _extract_channel_id_from_html(html: str) -> Optional[str]:
     for pattern in (
+        r'channel_id=([a-zA-Z0-9_-]*)',
         r'"channelId":"(UC[\w-]+)"',
         r'itemprop="channelId"\s+content="(UC[\w-]+)"',
     ):
@@ -97,22 +98,6 @@ def _parse_published_date(published: str) -> Optional[datetime.date]:
         return None
 
 
-def _extract_markitdown_text(md: MarkItDown, url: str) -> str:
-    try:
-        res = md.convert(url)
-    except Exception as exc:
-        LOGGER.warning("MarkItDown conversion failed for %s err=%s", url, exc)
-        return ""
-    if isinstance(res, str):
-        return res
-    for attr in ("text_content", "markdown", "text", "content"):
-        if hasattr(res, attr):
-            val = getattr(res, attr)
-            if isinstance(val, str) and val.strip():
-                return val
-    return str(res) if res is not None else ""
-
-
 def _build_tags(channel: Dict[str, Any]) -> List[str]:
     tags: List[str] = ["YouTube"]
     channel_tags = channel.get("tags") or []
@@ -141,7 +126,6 @@ def scrape(date: datetime.date, channels: Optional[List[Dict[str, Any]]] = None)
         LOGGER.info("No YouTube channels configured; returning empty result.")
         return LinkAggregationResult(articles=[])
 
-    md = MarkItDown()
     articles: List[ArticleLink] = []
     for channel in channels:
         feed_url = _resolve_feed_url(channel)
@@ -158,7 +142,7 @@ def scrape(date: datetime.date, channels: Optional[List[Dict[str, Any]]] = None)
             link = entry.get("link", "")
             if not link:
                 continue
-            raw_content = _extract_markitdown_text(md, link)
+            raw_content = extract_whisper_text(link)
             articles.append(
                 ArticleLink(
                     title=entry.get("title", "") or link,
@@ -175,6 +159,7 @@ def scrape(date: datetime.date, channels: Optional[List[Dict[str, Any]]] = None)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    today = datetime.date.today()
+    today = datetime.date.today() - datetime.timedelta(days=1)
     result = scrape(today)
     print(f"Found {len(result.articles)} videos for {today}")
+    [print(x) for x in result.articles]
