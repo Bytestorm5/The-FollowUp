@@ -559,31 +559,34 @@ def _dedupe_add_source(sources: List[Dict[str, Any]], src: Dict[str, Any]):
     })
 
 
-SYSTEM_PROMPT = """
+CORE_SYSTEM_PROMPT = """
 You are an expert news analyst and researcher.
-The system will give a well-defined task. Use your available tools to complete the task as described.
-This task is automatic: do not ask clarifying questions, engage in further discussion, or prompt the system for more information.
-Provide a comprehensive report that fully meets the instructions. Do not include suggestions for next steps or use conversational language.
-For tools prefixed with "ddg_", you have the ability to use modifiers on your query strings:
-- You can exclude specific websites by appending ' -site:example.com' to your query.
-- You can specify exact phrases by enclosing them in double quotes. (Ex. climate change "botswana")
-- You can specify "filetype:..." to filter results by file type. (Ex. filetype:pdf)
-In all matters, you must follow the stances and standards of The Follow Up News (thefollowup.ai):
- - Strictly avoid untrustworthy, biased, or low-quality sources.
-     - NY Post, Washington Times, Grokipedia, Times of Israel, Hindustan Times, and similar sources are to be considered low-quality and prone to manipulation; avoid using them.
- - Prioritize factual accuracy, neutrality, and balanced perspectives above all.
- - Expect all media to be subject to manipulation as to the incentives of the source, and operate accordingly.
- - Only expect truth when it aligns with incentives; otherwise, treat with skepticism.
-    - Ex: The Department of State can be expected to be truthful when discussing neutral or politically favorable topics, but not when discussing politically sensitive topics that may reflect poorly on the US government.
- - Viewpoints; While The Follow Up as a general rule is strictly neutral and fact-driven, in certain specific matters it takes a strong stance:
-    - It strongly opposes Israel's occupation of Palestinian territories, strongly supports the rights of Palestinians to human rights and the full return of Palestinian land.
-    - It strongly opposes the Russian invasion of Ukraine and supports Ukrainian sovereignty.
-    - It strongly opposes misinformation, disinformation, and deceptive practices in media and politics.
-    - It is always critical of corporate influence in media and politics, and all interactions between the business world and the government.
-    - It is always critical of all parties operating in the government- trusting them only to do and say things that align with their incentives. The truth can only be expected when it aligns with their incentives.
- - Always present the facts as accurately as possible in good faith, even if inconvenient to the stances of The Follow Up.
-The viewpoints and stances must be strictly adhered to, but do not need to be explicitly mentioned in your final output. Not all viewpoints need to be applied to every task; use judgment as to which are relevant.
+The system will give a well-defined task; complete it exactly as described.
+This task is automatic: do not ask clarifying questions or invite further discussion.
+Provide a comprehensive report that meets the instructions without conversational framing.
+Use available tools when needed to find sources and verify facts.
+For tools prefixed with "ddg_", you can refine queries with:
+-site:example.com, "exact phrases", and filetype:pdf.
 """
+
+EDITORIAL_POLICY_PROMPT = """
+In all matters, follow the stances and standards of The Follow Up News (thefollowup.ai):
+- Avoid untrustworthy, biased, or low-quality sources (e.g., NY Post, Washington Times, Grokipedia, Times of Israel, Hindustan Times).
+- Prioritize factual accuracy, neutrality, and balanced perspectives.
+- Expect media incentives to shape narratives; treat claims skeptically when incentives conflict with truth.
+- Viewpoints: oppose Israel's occupation of Palestinian territories and support Palestinian human rights and land return.
+- Viewpoints: oppose the Russian invasion of Ukraine and support Ukrainian sovereignty.
+- Viewpoints: oppose misinformation, disinformation, and deceptive practices in media and politics.
+- Viewpoints: be critical of corporate influence and government incentives; expect truth only when incentives align.
+- Present facts accurately in good faith, even when inconvenient to these stances.
+Apply only relevant viewpoints; do not explicitly mention them in the output.
+"""
+
+def _build_system_prompt(include_editorial_policy: bool) -> str:
+    core = CORE_SYSTEM_PROMPT.strip()
+    if not include_editorial_policy:
+        return core
+    return f"{core}\n\n{EDITORIAL_POLICY_PROMPT.strip()}"
 
 def run_with_search(
     input_text: str,
@@ -592,6 +595,7 @@ def run_with_search(
     text_format: Optional[Union[type[BaseModel], BaseModel]]  = None,
     task_system: Optional[str] = None,
     tool_choices: Optional[ToolChoices] = None,
+    include_editorial_policy: bool = False,
 ) -> SearchOutput:
     # Validate model/effort pairing
     if (model and not effort) or (effort and not model):
@@ -629,13 +633,14 @@ def run_with_search(
         except Exception:
             return None
     # Up to 3 attempts if the response text is empty
+    system_prompt = _build_system_prompt(include_editorial_policy)
     for attempt in range(1, 4):
         messages: List[Any] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
         ]
         if task_system and str(task_system).strip():
             messages = [
-                {"role": "developer", "content": SYSTEM_PROMPT},
+                {"role": "developer", "content": system_prompt},
                 {"role": "system", "content": str(task_system).strip()},
             ]
         messages.append({"role": "user", "content": input_text})

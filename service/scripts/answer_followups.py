@@ -200,7 +200,11 @@ def run(batch: int = 10) -> None:
                 continue
             groups = _normalize_groups(doc.get('follow_up_question_groups'), len(questions))
             prompt = _build_prompt(doc, questions, groups)
-            result = run_with_search(prompt, text_format=FollowupAnswersList)
+            result = run_with_search(
+                prompt,
+                text_format=FollowupAnswersList,
+                include_editorial_policy=True,
+            )
 
             mapping = _coerce_answers_map(getattr(result, 'parsed', None))
             if not mapping and getattr(result, 'text', None):
