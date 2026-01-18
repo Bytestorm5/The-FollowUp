@@ -19,30 +19,19 @@ from models import ArticleLink, LinkAggregationResult
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_CHANNELS: List[Dict[str, Any]] = []
+#DEFAULT_CHANNELS: List[Dict[str, Any]] = []
 
 _ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
 
 
 def _load_channels() -> List[Dict[str, Any]]:
-    channels: List[Dict[str, Any]] = list(DEFAULT_CHANNELS)
-    env_json = os.getenv("YOUTUBE_CHANNELS_JSON")
-    env_file = os.getenv("YOUTUBE_CHANNELS_FILE")
-    if env_file:
-        try:
-            with open(env_file, "r", encoding="utf-8") as handle:
-                data = json.load(handle)
-            if isinstance(data, list):
-                channels = data
-        except Exception as exc:
-            LOGGER.warning("Failed to load YOUTUBE_CHANNELS_FILE=%s err=%s", env_file, exc)
-    elif env_json:
-        try:
-            data = json.loads(env_json)
-            if isinstance(data, list):
-                channels = data
-        except Exception as exc:
-            LOGGER.warning("Failed to parse YOUTUBE_CHANNELS_JSON err=%s", exc)
+    channels: List[Dict[str, Any]] = [
+        {
+            "name": "White House",
+            "channel_url": "https://www.youtube.com/@WhiteHouse",
+            "tags": ["White House", "YouTube"]
+        }
+    ]
     return channels
 
 
