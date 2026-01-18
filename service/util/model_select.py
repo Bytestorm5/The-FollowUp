@@ -16,12 +16,12 @@ _CLIENT = OpenAI()
 # Mapping of task type and difficulty to model and reasoning effort
 MODEL_TABLE: Dict[str, Dict[Literal['high', 'medium', 'low'], Tuple[str, str]]] = {
     "agent": {
-        "high": ("gpt-5.1", "high"),
+        "high": ("gpt-5-mini", "high"),
         "medium": ("gpt-5-mini", "medium"),
         "low": ("gpt-5-nano", "low")
     },
     "process": {
-        "high": ("gpt-5.1", "low"),
+        "high": ("gpt-5-mini", "low"),
         "medium": ("gpt-5-mini", "none"),
         "low": ("gpt-5-nano", "none")
     }
