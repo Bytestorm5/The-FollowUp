@@ -62,8 +62,8 @@ function normalizeTier(tier: unknown): Tier {
   return "free";
 }
 
-function defaultLocaleFromHeaders() {
-  const headerList = headers();
+async function defaultLocaleFromHeaders() {
+  const headerList = await headers();
   const city =
     headerList.get("x-vercel-ip-city") ||
     headerList.get("x-geo-city") ||
@@ -197,7 +197,7 @@ export default async function AccountPage() {
   const normalizedTier = normalizeTier(user?.publicMetadata?.tier);
   const isInternalTier = normalizedTier === "moderator" || normalizedTier === "admin";
   const canSetLocale = normalizedTier === "supporter";
-  const defaultLocale = user ? defaultLocaleFromHeaders() : null;
+  const defaultLocale = user ? await defaultLocaleFromHeaders() : null;
   let localeSubscription = null;
 
   if (user && canSetLocale) {
