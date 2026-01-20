@@ -75,9 +75,6 @@ async function saveLocale(formData: FormData) {
   const client = await clerkClient();
   const user = await client.users.getUser(userId);
   const tier = normalizeTier(user.publicMetadata?.tier);
-  if (tier !== "supporter") {
-    return;
-  }
 
   const country = normalizeLocaleValue(formData.get("country") as string | null);
   const province = normalizeLocaleValue(formData.get("province") as string | null);
@@ -139,7 +136,7 @@ async function clearLocale() {
 export default async function PlansPage() {
   const user = await currentUser();
   const normalizedTier = normalizeTier(user?.publicMetadata?.tier);
-  const canSetLocale = normalizedTier === "supporter";
+  const canSetLocale = Boolean(user);
   const defaultLocale = await defaultLocaleFromHeaders();
   let localeSubscription = null;
 
@@ -228,18 +225,10 @@ export default async function PlansPage() {
         </div>
       </div>
 
-      <div className="mt-8 rounded-lg border border-[var(--color-border)] bg-background/60 p-6 shadow-sm">
-        <PricingTable />
-      </div>
-
       <div className="mt-8 rounded-lg border border-[var(--color-border)] bg-background/60 p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Local news coverage</h2>
-            <p className="text-sm text-foreground/70">
-              Paying subscribers can tailor local coverage by state and county. We default to your network location
-              when available.
-            </p>
           </div>
           <span className="rounded-full border border-[var(--color-border)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
             {localeStatusLabel}
@@ -252,13 +241,6 @@ export default async function PlansPage() {
             <p className="mt-2 text-xs text-foreground/60">
               Sign in and upgrade to Supporter to store your location preference. We&apos;ll still auto-detect your
               locale when possible.
-            </p>
-          </div>
-        ) : !canSetLocale ? (
-          <div className="mt-4 rounded-md border border-[var(--color-border)] bg-background/70 p-4 text-sm text-foreground/80">
-            <p className="font-medium text-foreground">Supporter feature</p>
-            <p className="mt-2 text-xs text-foreground/60">
-              Upgrade to Supporter to save your county-level coverage preferences.
             </p>
           </div>
         ) : null}
@@ -339,19 +321,11 @@ export default async function PlansPage() {
               </button>
             </SignInButton>
           )}
-          {user && !canSetLocale && (
-            <SignUpButton
-              mode="modal"
-              forceRedirectUrl="/plans"
-              signInForceRedirectUrl="/plans"
-              signInFallbackRedirectUrl="/plans"
-            >
-              <button className="rounded-md bg-primary/90 px-4 py-2 text-sm font-semibold text-white hover:bg-primary">
-                Upgrade to Supporter
-              </button>
-            </SignUpButton>
-          )}
         </form>
+      </div>
+
+      <div className="mt-8 rounded-lg border border-[var(--color-border)] bg-background/60 p-6 shadow-sm">
+        <PricingTable />
       </div>
     </div>
   );
