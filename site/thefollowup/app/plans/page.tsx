@@ -126,7 +126,7 @@ export default async function PlansPage() {
   const user = await currentUser();
   const normalizedTier = normalizeTier(user?.publicMetadata?.tier);
   const canSetLocale = normalizedTier === "supporter";
-  const defaultLocale = user ? await defaultLocaleFromHeaders() : null;
+  const defaultLocale = await defaultLocaleFromHeaders();
   let localeSubscription = null;
 
   if (user && canSetLocale) {
@@ -187,6 +187,8 @@ export default async function PlansPage() {
       : "Subscriber set"
     : "Not set";
 
+  const inputsDisabled = !user || !canSetLocale;
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-12">
       <div className="space-y-3 text-center">
@@ -224,96 +226,137 @@ export default async function PlansPage() {
         <PricingTable />
       </div>
 
-      {canSetLocale && (
-        <div className="mt-8 rounded-lg border border-[var(--color-border)] bg-background/60 p-6">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">Local news coverage</h2>
-              <p className="text-sm text-foreground/70">
-                Paying subscribers can tailor local coverage by state and county. We default to your network location
-                when available.
-              </p>
-            </div>
-            <span className="rounded-full border border-[var(--color-border)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
-              {localeStatusLabel}
-            </span>
-          </div>
-
-          <div className="mt-4 rounded-md border border-[var(--color-border)] bg-background/70 p-4 text-sm text-foreground/80">
-            <p className="font-medium text-foreground">Current locale</p>
-            <p className="mt-1">{localeLabel}</p>
-            <p className="mt-2 text-xs text-foreground/60">
-              County is required to activate county-level scrapers. If we only detect your city, please enter the
-              county to receive the most precise coverage.
+      <div className="mt-8 rounded-lg border border-[var(--color-border)] bg-background/60 p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Local news coverage</h2>
+            <p className="text-sm text-foreground/70">
+              Paying subscribers can tailor local coverage by state and county. We default to your network location
+              when available.
             </p>
           </div>
+          <span className="rounded-full border border-[var(--color-border)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
+            {localeStatusLabel}
+          </span>
+        </div>
 
-          <form action={saveLocale} className="mt-4 grid gap-4 md:grid-cols-2">
-            <label className="text-sm text-foreground/80">
-              Country
-              <input
-                name="country"
-                defaultValue={localeSubscription?.location?.country || defaultLocale?.country || ""}
-                className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-background px-3 py-2 text-sm"
-                placeholder="US"
-              />
-            </label>
-            <label className="text-sm text-foreground/80">
-              State / Province
-              <input
-                name="province"
-                defaultValue={localeSubscription?.location?.province || defaultLocale?.province || ""}
-                className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-background px-3 py-2 text-sm"
-                placeholder="California"
-              />
-            </label>
-            <label className="text-sm text-foreground/80">
-              County
-              <input
-                name="county"
-                defaultValue={localeSubscription?.location?.county || ""}
-                className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-background px-3 py-2 text-sm"
-                placeholder="Santa Clara"
-              />
-            </label>
-            <label className="text-sm text-foreground/80">
-              City (auto-detected if possible)
-              <input
-                name="city"
-                defaultValue={localeSubscription?.location?.city || defaultLocale?.city || ""}
-                className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-background px-3 py-2 text-sm"
-                placeholder="San Jose"
-              />
-            </label>
-            <label className="text-sm text-foreground/80">
-              Township (advanced, optional)
-              <input
-                name="township"
-                defaultValue={(localeSubscription?.location?.subdivisions as { township?: string } | null)?.township || ""}
-                className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-background px-3 py-2 text-sm"
-                placeholder="Downtown"
-              />
-            </label>
-            <div className="flex items-end gap-2">
-              <button
-                type="submit"
-                className="w-full rounded-md bg-primary/90 px-4 py-2 text-sm font-semibold text-white hover:bg-primary"
-              >
-                Save locale
-              </button>
-            </div>
-          </form>
+        {!user ? (
+          <div className="mt-4 rounded-md border border-[var(--color-border)] bg-background/70 p-4 text-sm text-foreground/80">
+            <p className="font-medium text-foreground">Sign in to save a locale</p>
+            <p className="mt-2 text-xs text-foreground/60">
+              Sign in and upgrade to Supporter to store your location preference. We&apos;ll still auto-detect your city
+              when possible.
+            </p>
+          </div>
+        ) : !canSetLocale ? (
+          <div className="mt-4 rounded-md border border-[var(--color-border)] bg-background/70 p-4 text-sm text-foreground/80">
+            <p className="font-medium text-foreground">Supporter feature</p>
+            <p className="mt-2 text-xs text-foreground/60">
+              Upgrade to Supporter to save your county-level coverage preferences.
+            </p>
+          </div>
+        ) : null}
 
-          <form action={clearLocale} className="mt-4">
+        <div className="mt-4 rounded-md border border-[var(--color-border)] bg-background/70 p-4 text-sm text-foreground/80">
+          <p className="font-medium text-foreground">Current locale</p>
+          <p className="mt-1">{localeLabel}</p>
+          <p className="mt-2 text-xs text-foreground/60">
+            County is required to activate county-level scrapers. If we only detect your city, please enter the county
+            to receive the most precise coverage.
+          </p>
+        </div>
+
+        <form action={saveLocale} className="mt-4 grid gap-4 md:grid-cols-2">
+          <label className="text-sm text-foreground/80">
+            Country
+            <input
+              name="country"
+              defaultValue={localeSubscription?.location?.country || defaultLocale?.country || ""}
+              className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              placeholder="US"
+              disabled={inputsDisabled}
+            />
+          </label>
+          <label className="text-sm text-foreground/80">
+            State / Province
+            <input
+              name="province"
+              defaultValue={localeSubscription?.location?.province || defaultLocale?.province || ""}
+              className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              placeholder="California"
+              disabled={inputsDisabled}
+            />
+          </label>
+          <label className="text-sm text-foreground/80">
+            County
+            <input
+              name="county"
+              defaultValue={localeSubscription?.location?.county || ""}
+              className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              placeholder="Santa Clara"
+              disabled={inputsDisabled}
+            />
+          </label>
+          <label className="text-sm text-foreground/80">
+            City (auto-detected if possible)
+            <input
+              name="city"
+              defaultValue={localeSubscription?.location?.city || defaultLocale?.city || ""}
+              className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              placeholder="San Jose"
+              disabled={inputsDisabled}
+            />
+          </label>
+          <label className="text-sm text-foreground/80">
+            Township (advanced, optional)
+            <input
+              name="township"
+              defaultValue={(localeSubscription?.location?.subdivisions as { township?: string } | null)?.township || ""}
+              className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              placeholder="Downtown"
+              disabled={inputsDisabled}
+            />
+          </label>
+          <div className="flex items-end gap-2">
             <button
               type="submit"
-              className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-foreground/70 hover:bg-black/5"
+              disabled={inputsDisabled}
+              className="w-full rounded-md bg-primary/90 px-4 py-2 text-sm font-semibold text-white hover:bg-primary disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Clear locale preference
+              Save locale
             </button>
-          </form>
-        </div>
-      )}
+          </div>
+        </form>
+
+        <form action={clearLocale} className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="submit"
+            disabled={inputsDisabled}
+            className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-foreground/70 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Clear locale preference
+          </button>
+          {!user && (
+            <SignInButton mode="modal" forceRedirectUrl="/plans" fallbackRedirectUrl="/plans">
+              <button className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm font-medium hover:bg-black/5">
+                Sign in
+              </button>
+            </SignInButton>
+          )}
+          {user && !canSetLocale && (
+            <SignUpButton
+              mode="modal"
+              forceRedirectUrl="/plans"
+              signInForceRedirectUrl="/plans"
+              signInFallbackRedirectUrl="/plans"
+            >
+              <button className="rounded-md bg-primary/90 px-4 py-2 text-sm font-semibold text-white hover:bg-primary">
+                Upgrade to Supporter
+              </button>
+            </SignUpButton>
+          )}
+        </form>
+      </div>
     </div>
   );
 }
