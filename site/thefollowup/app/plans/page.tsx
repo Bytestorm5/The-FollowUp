@@ -19,28 +19,46 @@ function normalizeTier(tier: unknown): Tier {
   return "free";
 }
 
+function decodeHeaderValue(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 async function defaultLocaleFromHeaders() {
   const headerList = await headers();
-  const city =
+  const city = decodeHeaderValue(
     headerList.get("x-vercel-ip-city") ||
-    headerList.get("x-geo-city") ||
-    headerList.get("x-city") ||
-    "";
-  const province =
+      headerList.get("x-geo-city") ||
+      headerList.get("x-city") ||
+      "",
+  );
+  const county = decodeHeaderValue(
+    headerList.get("x-vercel-ip-county") ||
+      headerList.get("x-geo-county") ||
+      headerList.get("x-county") ||
+      "",
+  );
+  const province = decodeHeaderValue(
     headerList.get("x-vercel-ip-region") ||
-    headerList.get("x-geo-region") ||
-    headerList.get("x-region") ||
-    "";
-  const country =
+      headerList.get("x-geo-region") ||
+      headerList.get("x-region") ||
+      "",
+  );
+  const country = decodeHeaderValue(
     headerList.get("x-vercel-ip-country") ||
-    headerList.get("x-geo-country") ||
-    headerList.get("x-country") ||
-    "";
+      headerList.get("x-geo-country") ||
+      headerList.get("x-country") ||
+      "",
+  );
   if (!city && !province && !country) {
     return null;
   }
   return {
     city,
+    county,
     province,
     country,
   };
@@ -65,15 +83,11 @@ async function saveLocale(formData: FormData) {
   const province = normalizeLocaleValue(formData.get("province") as string | null);
   const county = normalizeLocaleValue(formData.get("county") as string | null);
   const city = normalizeLocaleValue(formData.get("city") as string | null);
-  const township = normalizeLocaleValue(formData.get("township") as string | null);
-
-  const subdivisions = township ? { township } : null;
   const location = {
     country,
     province,
     county,
     city,
-    subdivisions,
   };
   const locationKey = buildLocaleKey(location);
   const now = new Date();
@@ -145,11 +159,7 @@ export default async function PlansPage() {
         {
           $set: {
             tier: normalizedTier,
-            location: {
-              ...defaultLocale,
-              county: "",
-              subdivisions: null,
-            },
+            location: defaultLocale,
             location_key: locationKey,
             source: "auto",
             active: true,
@@ -164,11 +174,7 @@ export default async function PlansPage() {
 
       localeSubscription = {
         user_id: user.id,
-        location: {
-          ...defaultLocale,
-          county: "",
-          subdivisions: null,
-        },
+        location: defaultLocale,
         location_key: locationKey,
         source: "auto",
         active: true,
@@ -244,8 +250,8 @@ export default async function PlansPage() {
           <div className="mt-4 rounded-md border border-[var(--color-border)] bg-background/70 p-4 text-sm text-foreground/80">
             <p className="font-medium text-foreground">Sign in to save a locale</p>
             <p className="mt-2 text-xs text-foreground/60">
-              Sign in and upgrade to Supporter to store your location preference. We&apos;ll still auto-detect your city
-              when possible.
+              Sign in and upgrade to Supporter to store your location preference. We&apos;ll still auto-detect your
+              locale when possible.
             </p>
           </div>
         ) : !canSetLocale ? (
@@ -304,16 +310,6 @@ export default async function PlansPage() {
               defaultValue={localeSubscription?.location?.city || defaultLocale?.city || ""}
               className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="San Jose"
-              disabled={inputsDisabled}
-            />
-          </label>
-          <label className="text-sm text-foreground/80">
-            Township (advanced, optional)
-            <input
-              name="township"
-              defaultValue={(localeSubscription?.location?.subdivisions as { township?: string } | null)?.township || ""}
-              className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-              placeholder="Downtown"
               disabled={inputsDisabled}
             />
           </label>
