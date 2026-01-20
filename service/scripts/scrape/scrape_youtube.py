@@ -20,7 +20,11 @@ LOGGER = logging.getLogger(__name__)
 
 #DEFAULT_CHANNELS: List[Dict[str, Any]] = []
 
-_ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
+_FEED_NS = {
+    "atom": "http://www.w3.org/2005/Atom",
+    "media": "http://search.yahoo.com/mrss/",
+    "yt": "http://www.youtube.com/xml/schemas/2015",
+}
 
 
 def _load_channels() -> List[Dict[str, Any]]:
@@ -72,19 +76,35 @@ def _resolve_feed_url(channel: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _iter_feed_entries(xml_text: str) -> Iterable[Dict[str, str]]:
+def _iter_feed_entries(xml_text: str) -> Iterable[Dict[str, Any]]:
     root = ET.fromstring(xml_text)
-    for entry in root.findall("atom:entry", _ATOM_NS):
-        title = entry.findtext("atom:title", default="", namespaces=_ATOM_NS)
-        link_el = entry.find("atom:link", _ATOM_NS)
+    for entry in root.findall("atom:entry", _FEED_NS):
+        title = entry.findtext("atom:title", default="", namespaces=_FEED_NS)
+        link_el = entry.find("atom:link", _FEED_NS)
         link = ""
         if link_el is not None:
             link = link_el.attrib.get("href", "") or ""
-        published = entry.findtext("atom:published", default="", namespaces=_ATOM_NS)
+        published = entry.findtext("atom:published", default="", namespaces=_FEED_NS)
+        duration_seconds = None
+        duration_el = entry.find("media:group/yt:duration", _FEED_NS)
+        if duration_el is not None:
+            raw_duration = duration_el.attrib.get("seconds")
+            try:
+                if raw_duration is not None:
+                    duration_seconds = int(raw_duration)
+            except ValueError:
+                duration_seconds = None
+        live_status = entry.findtext(
+            "yt:liveBroadcastContent",
+            default="",
+            namespaces=_FEED_NS,
+        ).strip()
         yield {
             "title": title.strip(),
             "link": link.strip(),
             "published": published.strip(),
+            "duration_seconds": duration_seconds,
+            "live_status": live_status,
         }
 
 
@@ -138,6 +158,12 @@ def scrape(date: datetime.date, channels: Optional[List[Dict[str, Any]]] = None)
         for entry in _iter_feed_entries(xml_text):
             published_date = _parse_published_date(entry.get("published", ""))
             if published_date != date:
+                continue
+            live_status = (entry.get("live_status") or "").lower()
+            if live_status in {"live", "upcoming"}:
+                continue
+            duration_seconds = entry.get("duration_seconds")
+            if isinstance(duration_seconds, int) and duration_seconds <= 60:
                 continue
             link = entry.get("link", "")
             if not link:
