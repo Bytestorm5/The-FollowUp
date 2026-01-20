@@ -3,7 +3,7 @@ import { SignUp } from "@clerk/nextjs";
 export default function SignUpPage() {
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4 py-12">
-      <SignUp routing="path" path="/sign-up" afterSignUpUrl="/account" afterSignInUrl="/account" />
+      <SignUp routing="path" path="/sign-up" afterSignUpUrl="/plans" afterSignInUrl="/plans" />
     </div>
   );
 }
