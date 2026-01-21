@@ -33,8 +33,8 @@ def _load_channels() -> List[Dict[str, Any]]:
             "name": "White House",
             "channel_url": "https://www.youtube.com/@WhiteHouse",
             #"channel_id": "UCYxRlFDqcWM4y7FfpiAN3KQ",
-            "tags": ["White House", "YouTube"]
-        }
+            "tags": []
+        },
     ]
     return channels
 
@@ -185,7 +185,7 @@ def scrape(date: datetime.date, channels: Optional[List[Dict[str, Any]]] = None)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    today = datetime.date.today() - datetime.timedelta(days=1)
+    today = datetime.date(2026, 1, 20)
     result = scrape(today)
     print(f"Found {len(result.articles)} videos for {today}")
     [print(x) for x in result.articles]
