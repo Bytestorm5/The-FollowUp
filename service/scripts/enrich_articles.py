@@ -88,32 +88,24 @@ def _fetch_markdown(url: str, fallback_html_text: str = "") -> str:
     basic = _fetch_url_text(url)
     return basic or fallback_html_text
 
+def _has_youtube_tag(article: Dict[str, Any]) -> bool:
+    tags = article.get('tags', []) or []
+    return any(str(tag).strip().lower() == 'youtube' for tag in tags)
+
+
 def _get_article_markdown(article: Dict[str, Any]) -> str:
-    link = article.get('link', '')
     raw = article.get('raw_content', '') or ''
+    if _has_youtube_tag(article):
+        return raw
+    link = article.get('link', '')
     md = _fetch_markdown(link, fallback_html_text=raw)
     return md or raw
-    try:
-        resp = playwright_get(url, timeout=20)
-        html = resp.content.decode("utf-8", errors="ignore")
-        soup = BeautifulSoup(html, "html.parser")
-        # Remove scripts/styles
-        for tag in soup(["script", "style", "noscript", "header", "head", "footer"]):
-            tag.decompose()
-        # Prefer <article> content
 
-        
-        return soup.get_text("\n", strip=True)
-        # Gather paragraphs and list items as lines
-        lines: List[str] = []
-        for el in container.find_all(["h1", "h2", "h3", "h4", "p", "li", "blockquote"]):
-            text = el.get_text(" ", strip=True)
-            if text:
-                lines.append(text)
-        return "\n\n".join(lines) if lines else container.get_text("\n", strip=True)
-    except Exception:
-        logger.exception("Failed to fetch or parse article url: %s", url)
-        return ""
+
+def _select_clean_markdown(article: Dict[str, Any], md_text: str, fallback: str = "") -> str:
+    if _has_youtube_tag(article):
+        return article.get('raw_content', '') or ''
+    return link_named_entities_in_markdown(md_text or fallback)
 
 
 def _normalize_question_groups(groups: Any, question_count: int) -> List[List[int]]:
@@ -239,7 +231,7 @@ def _fallback_enrich(docs: list[Dict[str, Any]], template: str) -> None:
             question_groups = _normalize_question_groups(groups_raw, len(questions))
             update = {
                 '$set': {
-                    'clean_markdown': link_named_entities_in_markdown(md_text or enr.clean_markdown),
+                    'clean_markdown': _select_clean_markdown(art, md_text, enr.clean_markdown),
                     'summary_paragraph': link_named_entities_in_markdown(enr.summary_paragraph),
                     'neutral_headline': getattr(enr, 'neutral_headline', '') or art.get('title', '') or '',
                     'key_takeaways': key_takeaways,
@@ -443,7 +435,7 @@ def run(batch: int = 50):
                 {'_id': docs_by_id[custom_id]['_id']},
                 {'$set': {
                     # Overwrite with deterministic markitdown result
-                    'clean_markdown': link_named_entities_in_markdown(md_by_id.get(custom_id, enr.clean_markdown)),
+                    'clean_markdown': _select_clean_markdown(original_doc, md_by_id.get(custom_id, ''), enr.clean_markdown),
                     'summary_paragraph': link_named_entities_in_markdown(enr.summary_paragraph),
                     'neutral_headline': getattr(enr, 'neutral_headline', '') or original_doc.get('title', '') or '',
                     'key_takeaways': key_takeaways,
