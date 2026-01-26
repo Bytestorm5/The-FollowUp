@@ -186,6 +186,29 @@ export async function getSilverLogsCollection(): Promise<Collection<SilverLog>> 
   return db.collection<SilverLog>("silver_logs");
 }
 
+export interface LocaleSubscription {
+  _id?: ObjectId;
+  user_id: string;
+  tier?: "free" | "supporter" | "moderator" | "admin";
+  location: {
+    country?: string | null;
+    province?: string | null;
+    county?: string | null;
+    city?: string | null;
+    subdivisions?: Record<string, string | null> | null;
+  };
+  location_key: string;
+  source: "auto" | "user";
+  active: boolean;
+  created_at: Date | string;
+  updated_at: Date | string;
+}
+
+export async function getLocaleSubscriptionsCollection(): Promise<Collection<LocaleSubscription>> {
+  const db = await getDb();
+  return db.collection<LocaleSubscription>("locale_subscriptions");
+}
+
 // Gold collections: community features
 export interface GoldComment {
   _id?: ObjectId;

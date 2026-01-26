@@ -14,6 +14,7 @@ DB = client.get_database("TheFollowup")
 bronze_links = DB.get_collection("bronze_links")
 silver_claims = DB.get_collection("silver_claims")
 silver_updates = DB.get_collection("silver_updates")
+locale_subscriptions = DB.get_collection("locale_subscriptions")
 
 
 def normalize_dates(obj: object) -> object:
