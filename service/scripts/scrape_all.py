@@ -3,7 +3,9 @@ import sys
 import datetime
 import importlib.util
 import logging
-from typing import List
+import json
+import re
+from typing import List, Dict, Optional
 
 _HERE = os.path.dirname(__file__)
 _SERVICE_ROOT = os.path.abspath(os.path.join(_HERE, '..'))
@@ -18,9 +20,86 @@ logger = logging.getLogger(__name__)
 try:
 	from util import mongo as _mongo_module
 	_BRONZE_COLLECTION = getattr(_mongo_module, 'bronze_links', None)
+	_LOCALE_COLLECTION = getattr(_mongo_module, 'locale_subscriptions', None)
 	from util.slug import generate_unique_slug as _gen_slug
 except Exception:
 	_BRONZE_COLLECTION = None
+	_LOCALE_COLLECTION = None
+
+_LOCALE_METADATA_NAME = "locale.json"
+
+
+def _normalize_locale_value(value: Optional[str]) -> str:
+	if value is None:
+		return ""
+	return str(value).strip().lower()
+
+
+def _build_locale_key(metadata: Dict[str, object]) -> str:
+	parts = [
+		_normalize_locale_value(metadata.get("country")),
+		_normalize_locale_value(metadata.get("province")),
+		_normalize_locale_value(metadata.get("county")),
+	]
+	subdivisions = metadata.get("subdivisions") or {}
+	if isinstance(subdivisions, dict):
+		for key in sorted(subdivisions.keys()):
+			val = _normalize_locale_value(subdivisions.get(key))
+			if val:
+				parts.append(f"{key}:{val}")
+	return "|".join([p for p in parts if p])
+
+
+def _load_locale_metadata(folder: str) -> Optional[Dict[str, object]]:
+	meta_path = os.path.join(folder, _LOCALE_METADATA_NAME)
+	if not os.path.isfile(meta_path):
+		return None
+	try:
+		with open(meta_path, "r", encoding="utf-8") as handle:
+			data = json.load(handle)
+	except Exception as exc:
+		logger.exception(f"Failed to read locale metadata {meta_path}: {exc}")
+		return None
+
+	if not isinstance(data, dict):
+		logger.error(f"Locale metadata must be a JSON object: {meta_path}")
+		return None
+
+	return data
+
+
+def _locale_has_subscribers(metadata: Dict[str, object]) -> bool:
+	if _LOCALE_COLLECTION is None:
+		logger.warning("Locale subscriptions collection unavailable; skipping locale-specific scrapers.")
+		return False
+	key = _build_locale_key(metadata)
+	if not key:
+		logger.warning("Locale metadata missing required fields (country/province/county); skipping.")
+		return False
+	regex = f"^{re.escape(key)}(\\||$)"
+	try:
+		return _LOCALE_COLLECTION.count_documents({"active": True, "location_key": {"$regex": regex}}) > 0
+	except Exception as exc:
+		logger.exception(f"Failed to query locale subscriptions for {metadata}: {exc}")
+		return False
+
+
+def _discover_scrapers_in_folder(scrape_dir: str) -> List[str]:
+	files = []
+	if not os.path.isdir(scrape_dir):
+		return files
+	for name in os.listdir(scrape_dir):
+		path = os.path.join(scrape_dir, name)
+		if not os.path.isfile(path):
+			continue
+		if not name.endswith('.py'):
+			continue
+		if name.startswith('_'):
+			continue
+		if name == '__init__.py':
+			continue
+		files.append(path)
+	return sorted(files)
 
 
 def _discover_scrapers(scrape_dir: str) -> List[str]:
@@ -29,13 +108,24 @@ def _discover_scrapers(scrape_dir: str) -> List[str]:
 	if not os.path.isdir(scrape_dir):
 		return files
 	for name in os.listdir(scrape_dir):
+		path = os.path.join(scrape_dir, name)
+		if os.path.isdir(path):
+			metadata = _load_locale_metadata(path)
+			if metadata is None:
+				logger.info(f"Skipping folder without locale metadata: {path}")
+				continue
+			if not _locale_has_subscribers(metadata):
+				logger.info(f"No subscribers for locale folder {path}; skipping")
+				continue
+			files.extend(_discover_scrapers_in_folder(path))
+			continue
 		if not name.endswith('.py'):
 			continue
 		if name.startswith('_'):
 			continue
 		if name == '__init__.py':
 			continue
-		files.append(os.path.join(scrape_dir, name))
+		files.append(path)
 	return sorted(files)
 
 
@@ -188,4 +278,3 @@ def main(argv=None):
 
 if __name__ == '__main__':
 	main()
-
